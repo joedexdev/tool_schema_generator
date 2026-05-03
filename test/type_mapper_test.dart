@@ -5,12 +5,6 @@ import 'package:tool_schema_generator/src/type_mapper.dart';
 
 void main() {
   group('TypeMapper', () {
-    late TypeMapper mapper;
-
-    setUp(() {
-      mapper = TypeMapper();
-    });
-
     group('primitive types', () {
       test('maps String to "string"', () async {
         final result = await _resolveAndMapType('String param');

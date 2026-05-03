@@ -1,6 +1,7 @@
 name: example
 description: Example usage of tool_schema_generator.
 version: 0.1.0
+publish_to: none
 
 environment:
   sdk: ^3.9.0
