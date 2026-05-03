@@ -1,0 +1,13 @@
+name: example
+description: Example usage of tool_schema_generator.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  tool_schema_generator:
+    path: ../
+
+dev_dependencies:
+  build_runner: ^2.4.0

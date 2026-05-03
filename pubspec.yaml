@@ -1,0 +1,21 @@
+name: tool_schema_generator
+description: >
+  Annotations for automatic LLM tool schema generation.
+  Mark functions with @Tool() and parameters with @Describe()
+  to generate JSON Schema Draft 2020-12 compatible tool definitions.
+version: 0.1.0
+repository: https://github.com/youssefdawoud-dev/tool_schema_generator
+homepage: https://github.com/youssefdawoud-dev/tool_schema_generator
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  analyzer: '>=8.1.1 <14.0.0'
+  build: '>=3.0.0 <5.0.0'
+  source_gen: ^4.2.3
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  build_test: ^3.0.0
+  test: ^1.31.1

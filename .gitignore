@@ -1,0 +1,19 @@
+# Files and directories created by pub
+.dart_tool/
+.packages
+build/
+# If you build packages locally or use custom scripts
+# It's best to ignore the generated pubspec.lock since this is a library package
+pubspec.lock
+
+# Directory created by dartdoc
+doc/api/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.iml
