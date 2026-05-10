@@ -66,6 +66,29 @@ The generator creates a `tools.g.dart` file containing a `toolRegistry` instance
 
 You can pass the schemas directly to your LLM framework using `toolRegistry.allSchemas`, or select individual ones via strongly-typed getters like `toolRegistry.sendEmail`.
 
+- `toolRegistry.allSchemas` gives you `List<Map<String, dynamic>>` (all schemas in the file).
+- `toolRegistry.sendEmail` gives you a single `Map<String, dynamic>` just for that tool.
+  (You pass these directly into your LLM's tools parameter).
+
+then disispatching (When the LLM replies)
+
+```dart
+final result = await toolRegistry.call(
+  toolCall.name,
+  toolCall.arguments
+);
+```
+
+The registry takes the raw string name and raw JSON Map<String, dynamic> from the LLM, finds the right Dart closure, safely parses and casts all arguments, calls your function, and awaits the result.
+
+This makes us reach to our final life cycle which what the tool returns after its been called and processed.
+It guarantees a return of the sealed class `ToolResult`. You never have to try/catch argument parsing errors yourself.
+
+- `ToolSuccess`: Contains the raw return `.value` of your Dart function.
+- `ToolError`: Contains structured data (`.code`, `.message`, `.field`) if the LLM hallucinated an argument, forgot a required field, or if your function threw an internal exception. You can feed this error message directly back to the LLM so it can fix its mistake!
+
+This gives you a completely type-safe, boilerplate-free bridge between Dart code and LLM agent loops.
+
 ```dart
 import 'tools.dart';
 
@@ -73,15 +96,22 @@ void main() async {
   // 1. Pass the schemas to your LLM
   final response = await llm.generate(
     prompt: "Send an email to hello@example.com saying Hi!",
+    // toolRegistry.allSchemas -> is a List<Map<String, dynamic>>
+    // toolRegistry.sendEmail -> is a Map<String, dynamic>
     tools: toolRegistry.allSchemas, // or [toolRegistry.sendEmail]
   );
-  
-  // 2. When the LLM decides to call a tool, dispatch it through the registry!
+
+  // 2. When the LLM decides to call a tool,
+  // you just simply call the dispatch method on the
   for (final toolCall in response.toolCalls) {
-    // The registry safely casts arguments, handles missing required fields, 
+    // The registry safely casts arguments,
+    // which handles missing required fields,
     // and catches internal exceptions.
-    final result = await toolRegistry.call(toolCall.name, toolCall.arguments);
-    
+    final result = await toolRegistry.call(
+      toolCall.name,
+      toolCall.arguments,
+    );
+
     switch (result) {
       case ToolSuccess(:final value):
         print("Tool returned: $value");
@@ -95,6 +125,7 @@ void main() async {
 ## 🧠 Advanced Usage
 
 ### Enums
+
 Enums are automatically converted to JSON Schema string enums:
 
 ```dart
@@ -106,6 +137,7 @@ void setTaskPriority(Priority priority) {}
 ```
 
 ### Nested Objects
+
 Custom classes are introspected. The generator looks at the class's constructor parameters to build a nested JSON Schema object:
 
 ```dart
@@ -121,11 +153,12 @@ void updateLocation(Location location) {}
 ```
 
 ### Overriding Names and Descriptions
+
 If you don't want to use the Dart function name or doc comment, you can override them directly in the annotation:
 
 ```dart
 @Tool(
-  name: 'custom_search_tool', 
+  name: 'custom_search_tool',
   description: 'A highly specific search tool description.'
 )
 void search(String query) {}
