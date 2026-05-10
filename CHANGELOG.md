@@ -1,3 +1,7 @@
+## 0.2.1
+
+* **Documentation:** Updated README with detailed usage guide for tool dispatching, error handling, and registry life-cycle.
+
 ## 0.2.0
 
 ### New: Tool Dispatcher & Subclass Schema Getters
