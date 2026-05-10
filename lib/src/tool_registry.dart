@@ -99,10 +99,9 @@ class ToolRegistry {
       final value = await Future.sync(() => handler(args));
       return ToolSuccess(value);
     } on ToolArgumentException catch (e) {
-      final code =
-          e.message.toLowerCase().contains('missing')
-              ? 'MISSING_ARGUMENT'
-              : 'INVALID_ARGUMENT';
+      final code = e.message.toLowerCase().contains('missing')
+          ? 'MISSING_ARGUMENT'
+          : 'INVALID_ARGUMENT';
       return ToolError(
         code: code,
         message: e.message,

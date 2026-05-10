@@ -29,10 +29,8 @@ class ToolSchemaGenerator extends Generator {
   @override
   String generate(LibraryReader library, BuildStep buildStep) {
     // Collected per-function data for schema + dispatcher generation
-    final functions = <({
-      TopLevelFunctionElement element,
-      ConstantReader annotation,
-    })>[];
+    final functions =
+        <({TopLevelFunctionElement element, ConstantReader annotation})>[];
 
     for (final element in library.allElements) {
       if (element is! TopLevelFunctionElement) continue;
@@ -78,7 +76,8 @@ class ToolSchemaGenerator extends Generator {
 
   /// Generates the `_ToolRegistry` subclass and `toolRegistry` instance.
   String _generateDispatcher(
-    List<({TopLevelFunctionElement element, ConstantReader annotation})> functions,
+    List<({TopLevelFunctionElement element, ConstantReader annotation})>
+    functions,
     TypeMapper typeMapper,
   ) {
     final buffer = StringBuffer();
@@ -130,8 +129,9 @@ class ToolSchemaGenerator extends Generator {
     for (final fn in functions) {
       final toolName =
           fn.annotation.peek('name')?.stringValue ?? fn.element.name;
-      handlersBuffer
-          .writeln("  '$toolName': (Map<String, dynamic> args) async {");
+      handlersBuffer.writeln(
+        "  '$toolName': (Map<String, dynamic> args) async {",
+      );
 
       final positionalArgs = <String>[];
       final namedArgs = <String>[];
@@ -164,15 +164,11 @@ class ToolSchemaGenerator extends Generator {
     }
 
     // ── 4. Emit the toolRegistry instance ─────────────────────────────────────
-    buffer.writeln(
-      '/// The generated tool registry for this file.',
-    );
+    buffer.writeln('/// The generated tool registry for this file.');
     buffer.writeln(
       '/// Use [toolRegistry.allSchemas] to pass all schemas to your LLM,',
     );
-    buffer.writeln(
-      '/// and [toolRegistry.call] to dispatch model tool calls.',
-    );
+    buffer.writeln('/// and [toolRegistry.call] to dispatch model tool calls.');
     buffer.writeln('final toolRegistry = _ToolRegistry(');
     buffer.writeln('  // handlers');
     buffer.writeln('  {');

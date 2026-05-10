@@ -504,37 +504,40 @@ void main() {
     // ------------------------------------------------------------------
     // @Tool(name:) override → getter uses Dart name, schema key uses tool name
     // ------------------------------------------------------------------
-    test('named getter uses Dart function name, schema key uses tool name override', () async {
-      await testBuilder(
-        _makeBuilder(),
-        {
-          'tool_schema_generator|lib/tool_schema_generator.dart':
-              _annotationSource,
-          '_test|lib/test.dart': '''
+    test(
+      'named getter uses Dart function name, schema key uses tool name override',
+      () async {
+        await testBuilder(
+          _makeBuilder(),
+          {
+            'tool_schema_generator|lib/tool_schema_generator.dart':
+                _annotationSource,
+            '_test|lib/test.dart': '''
             import 'package:tool_schema_generator/tool_schema_generator.dart';
             part 'test.g.dart';
 
             @Tool(name: 'custom_name')
             void myTool() {}
           ''',
-        },
-        generateFor: {'_test|lib/test.dart'},
-        outputs: {
-          '_test|lib/test.tool_schema.g.part': decodedMatches(
-            allOf([
-              // Schema key is the overridden tool name
-              contains("'name': 'custom_name'"),
-              // Getter uses the Dart function name
-              contains("get myTool => schemaFor('custom_name')"),
-              // Handlers map uses the overridden name
-              contains("'custom_name': (Map<String, dynamic> args)"),
-              // Schemas map also uses overridden name
-              contains("'custom_name': myToolToolSchema"),
-            ]),
-          ),
-        },
-      );
-    });
+          },
+          generateFor: {'_test|lib/test.dart'},
+          outputs: {
+            '_test|lib/test.tool_schema.g.part': decodedMatches(
+              allOf([
+                // Schema key is the overridden tool name
+                contains("'name': 'custom_name'"),
+                // Getter uses the Dart function name
+                contains("get myTool => schemaFor('custom_name')"),
+                // Handlers map uses the overridden name
+                contains("'custom_name': (Map<String, dynamic> args)"),
+                // Schemas map also uses overridden name
+                contains("'custom_name': myToolToolSchema"),
+              ]),
+            ),
+          },
+        );
+      },
+    );
 
     // ------------------------------------------------------------------
     // Dispatcher handlers + schemas maps both present

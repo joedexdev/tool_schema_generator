@@ -65,6 +65,7 @@ final class ToolError extends ToolResult {
   });
 
   @override
-  String toString() => 'ToolError(code: $code, message: $message'
+  String toString() =>
+      'ToolError(code: $code, message: $message'
       '${field != null ? ', field: $field' : ''})';
 }

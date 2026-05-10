@@ -177,8 +177,9 @@ class TypeMapper {
     }
 
     final typeName = type.getDisplayString();
-    final baseTypeName =
-        typeName.endsWith('?') ? typeName.substring(0, typeName.length - 1) : typeName;
+    final baseTypeName = typeName.endsWith('?')
+        ? typeName.substring(0, typeName.length - 1)
+        : typeName;
     final nullableSuffix = isNullable ? '?' : '';
 
     switch (baseTypeName) {
@@ -219,7 +220,9 @@ class TypeMapper {
       final enumName = element.name;
       if (enumName == null) return withDefault('$rawAccess as dynamic');
       if (isNullable) {
-        return withDefault('_parseEnum($enumName.values, $rawAccess as String?)');
+        return withDefault(
+          '_parseEnum($enumName.values, $rawAccess as String?)',
+        );
       }
       return withDefault('_parseEnum($enumName.values, $rawAccess as String)');
     }
@@ -249,7 +252,8 @@ class TypeMapper {
     if (className == null) return null;
 
     final constructor =
-        classElement.unnamedConstructor ?? classElement.constructors.firstOrNull;
+        classElement.unnamedConstructor ??
+        classElement.constructors.firstOrNull;
     if (constructor == null) return null;
 
     final cap = className[0].toUpperCase() + className.substring(1);
