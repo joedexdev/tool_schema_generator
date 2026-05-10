@@ -132,39 +132,68 @@ const allToolSchemas = <Map<String, dynamic>>[
   sendEmailToolSchema,
 ];
 
-/// Maps tool names to handlers. Pass to your LLM agent loop.
-final toolRegistry = ToolRegistry({
-  'getWeather': (Map<String, dynamic> args) async {
-    return getWeather(
-      args['city'] as String,
-      unit:
-          _parseEnum(TemperatureUnit.values, args['unit'] as String) ??
-          TemperatureUnit.celsius,
-    );
+/// Generated registry — provides named schema getters and tool dispatch.
+final class _ToolRegistry extends ToolRegistry {
+  const _ToolRegistry(super.handlers, super.schemas);
+
+  /// JSON Schema for [getWeather].
+  Map<String, dynamic> get getWeather => schemaFor('getWeather');
+
+  /// JSON Schema for [searchProducts].
+  Map<String, dynamic> get searchProducts => schemaFor('search_products');
+
+  /// JSON Schema for [findNearbyPlaces].
+  Map<String, dynamic> get findNearbyPlaces => schemaFor('findNearbyPlaces');
+
+  /// JSON Schema for [sendEmail].
+  Map<String, dynamic> get sendEmail => schemaFor('sendEmail');
+}
+
+/// The generated tool registry for this file.
+/// Use [toolRegistry.allSchemas] to pass all schemas to your LLM,
+/// and [toolRegistry.call] to dispatch model tool calls.
+final toolRegistry = _ToolRegistry(
+  // handlers
+  {
+    'getWeather': (Map<String, dynamic> args) async {
+      return getWeather(
+        args['city'] as String,
+        unit:
+            _parseEnum(TemperatureUnit.values, args['unit'] as String) ??
+            TemperatureUnit.celsius,
+      );
+    },
+    'search_products': (Map<String, dynamic> args) async {
+      return searchProducts(
+        args['query'] as String,
+        args['maxResults'] as int,
+        includeOutOfStock: args['includeOutOfStock'] as bool?,
+      );
+    },
+    'findNearbyPlaces': (Map<String, dynamic> args) async {
+      return findNearbyPlaces(
+        _parseGeoLocation(args['location'] as Map<String, dynamic>),
+        (args['radiusKm'] as num).toDouble(),
+        category: args['category'] as String?,
+      );
+    },
+    'sendEmail': (Map<String, dynamic> args) async {
+      return sendEmail(
+        args['to'] as String,
+        args['subject'] as String,
+        args['body'] as String,
+        cc: (args['cc'] as List?)?.cast<String>(),
+      );
+    },
   },
-  'search_products': (Map<String, dynamic> args) async {
-    return searchProducts(
-      args['query'] as String,
-      args['maxResults'] as int,
-      includeOutOfStock: args['includeOutOfStock'] as bool?,
-    );
+  // schemas
+  {
+    'getWeather': getWeatherToolSchema,
+    'search_products': searchProductsToolSchema,
+    'findNearbyPlaces': findNearbyPlacesToolSchema,
+    'sendEmail': sendEmailToolSchema,
   },
-  'findNearbyPlaces': (Map<String, dynamic> args) async {
-    return findNearbyPlaces(
-      _parseGeoLocation(args['location'] as Map<String, dynamic>),
-      (args['radiusKm'] as num).toDouble(),
-      category: args['category'] as String?,
-    );
-  },
-  'sendEmail': (Map<String, dynamic> args) async {
-    return sendEmail(
-      args['to'] as String,
-      args['subject'] as String,
-      args['body'] as String,
-      cc: (args['cc'] as List?)?.cast<String>(),
-    );
-  },
-});
+);
 
 // ignore: unused_element
 T _parseEnum<T extends Enum>(List<T> values, String? raw) =>

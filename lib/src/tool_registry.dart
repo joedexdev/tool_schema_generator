@@ -7,38 +7,48 @@ import 'tool_result.dart';
 /// [Future] that resolves to the tool function's return value.
 typedef ToolHandler = Future<dynamic> Function(Map<String, dynamic> args);
 
-/// A registry that maps tool names to their handler functions, providing a
-/// clean, type-safe dispatch layer between the LLM and your Dart code.
+/// A registry that maps tool names to their handler functions **and** their
+/// JSON Schema definitions, providing a unified dispatch + discovery layer
+/// between the LLM and your Dart code.
 ///
-/// Instances are created by the code generator and live in the `.g.dart` file.
-/// You should not instantiate this class manually.
+/// The generated subclass (from `tool_schema_generator`) extends this class
+/// and adds a strongly-typed getter per tool:
+///
+/// ```dart
+/// // Generated in tools.g.dart — do not write this manually
+/// final toolRegistry = _ToolRegistry({ handlers }, { schemas });
+/// ```
 ///
 /// ## Usage
 ///
 /// ```dart
-/// // tools.g.dart provides `toolRegistry`
-/// import 'tools.dart';
+/// import 'tools.dart'; // exposes `toolRegistry`
 ///
-/// final result = await toolRegistry.call(
-///   toolCall.name,       // e.g. 'getWeather'
-///   toolCall.arguments,  // e.g. {'city': 'Cairo', 'unit': 'celsius'}
-/// );
+/// // ── Build the LLM request ─────────────────────────────────
+/// llm.generate(tools: toolRegistry.allSchemas);
 ///
+/// // ── Or select specific tool schemas by Dart name ──────────
+/// llm.generate(tools: [toolRegistry.getWeather]);  // generated getter
+///
+/// // ── Handle the response ───────────────────────────────────
+/// final result = await toolRegistry.call(call.name, call.arguments);
 /// switch (result) {
-///   case ToolSuccess(:final value):
-///     // Send value back to the model
-///   case ToolError(:final code, :final message):
-///     // Handle error — optionally send back to the model as feedback
+///   case ToolSuccess(:final value): sendToModel(value.toString());
+///   case ToolError(:final code, :final message): print('$code: $message');
 /// }
 /// ```
 class ToolRegistry {
   final Map<String, ToolHandler> _handlers;
+  final Map<String, Map<String, dynamic>> _schemas;
 
-  /// Creates a registry from a map of tool name → handler function.
+  /// Creates a registry.
   ///
-  /// This constructor is called by generated code; prefer using the generated
-  /// `toolRegistry` constant rather than constructing one manually.
-  const ToolRegistry(this._handlers);
+  /// [handlers] maps every tool name to its handler function.
+  /// [schemas] maps every tool name to its JSON Schema definition. When
+  /// omitted, [allSchemas] will be empty and [schemaFor] will throw.
+  const ToolRegistry(this._handlers, [this._schemas = const {}]);
+
+  // ── Discovery ─────────────────────────────────────────────────────────────
 
   /// Whether a tool with the given [name] is registered.
   bool contains(String name) => _handlers.containsKey(name);
@@ -46,17 +56,39 @@ class ToolRegistry {
   /// All registered tool names.
   Iterable<String> get toolNames => _handlers.keys;
 
+  /// Returns an unmodifiable list of all registered tool schemas.
+  ///
+  /// Pass this directly to your LLM client instead of maintaining a separate
+  /// `allToolSchemas` list:
+  ///
+  /// ```dart
+  /// await llm.generate(tools: toolRegistry.allSchemas);
+  /// ```
+  List<Map<String, dynamic>> get allSchemas =>
+      List.unmodifiable(_schemas.values);
+
+  /// Returns the JSON Schema for the tool registered under [name].
+  ///
+  /// Throws [StateError] if no schema has been registered for [name].
+  /// Prefer the generated named getters (e.g. `toolRegistry.getWeather`)
+  /// over this method when you know the tool name at compile time.
+  Map<String, dynamic> schemaFor(String name) =>
+      _schemas[name] ??
+      (throw StateError(
+        'No schema registered for tool "$name". '
+        'Available: [${_schemas.keys.join(', ')}]',
+      ));
+
+  // ── Dispatch ──────────────────────────────────────────────────────────────
+
   /// Invokes the tool registered under [name] with the provided [args] and
   /// returns a [ToolResult].
   ///
   /// **Error handling layers:**
-  /// 1. [ToolArgumentException] (invalid/missing arg from LLM) →
-  ///    [ToolError] with code `INVALID_ARGUMENT` or `MISSING_ARGUMENT`
-  /// 2. Any other exception from the tool's own logic →
-  ///    [ToolError] with code `INTERNAL_ERROR`
+  /// 1. [ToolArgumentException] → [ToolError] with code `INVALID_ARGUMENT` / `MISSING_ARGUMENT`
+  /// 2. Any other exception → [ToolError] with code `INTERNAL_ERROR`
   ///
-  /// Throws [UnknownToolException] if [name] is not registered — this is a
-  /// developer/configuration error and is **not** caught internally.
+  /// Throws [UnknownToolException] if [name] is not registered.
   Future<ToolResult> call(String name, Map<String, dynamic> args) async {
     final handler = _handlers[name];
     if (handler == null) {
@@ -64,7 +96,6 @@ class ToolRegistry {
     }
 
     try {
-      // Future.sync wraps both sync and async functions uniformly
       final value = await Future.sync(() => handler(args));
       return ToolSuccess(value);
     } on ToolArgumentException catch (e) {
@@ -82,7 +113,6 @@ class ToolRegistry {
     } catch (e) {
       return ToolError(
         code: 'INTERNAL_ERROR',
-        // Keep the real error out of the LLM context but leave it accessible
         message: 'An internal error occurred while executing tool "$name".',
         actual: e.toString(),
       );
@@ -91,8 +121,6 @@ class ToolRegistry {
 
   /// Like [call], but returns `null` instead of throwing [UnknownToolException]
   /// when [name] is not registered.
-  ///
-  /// Useful in agent loops where optional tools may not be loaded.
   Future<ToolResult>? callOrNull(String name, Map<String, dynamic> args) {
     if (!_handlers.containsKey(name)) return null;
     return call(name, args);

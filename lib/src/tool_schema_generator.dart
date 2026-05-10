@@ -76,14 +76,14 @@ class ToolSchemaGenerator extends Generator {
     return output.toString();
   }
 
-  /// Generates the `toolRegistry` constant and all required private helpers.
+  /// Generates the `_ToolRegistry` subclass and `toolRegistry` instance.
   String _generateDispatcher(
     List<({TopLevelFunctionElement element, ConstantReader annotation})> functions,
     TypeMapper typeMapper,
   ) {
     final buffer = StringBuffer();
 
-    // Collect which enum / class types need helpers (deduplicated by name)
+    // Collect enum / class types that need helpers (deduplicated by name)
     final enumHelperNeeded = <String>{};
     final classHelpers = <String, String>{}; // className → generated source
 
@@ -95,10 +95,8 @@ class ToolSchemaGenerator extends Generator {
         }
         if (element is ClassElement && element.name != null) {
           final name = element.name!;
-          // Only generate helpers for user-defined classes, not SDK types
           final libUri = element.library.uri.toString();
-          final isSdkType = libUri.startsWith('dart:');
-          if (!isSdkType && !classHelpers.containsKey(name)) {
+          if (!libUri.startsWith('dart:') && !classHelpers.containsKey(name)) {
             final src = typeMapper.generateClassParser(element);
             if (src != null) classHelpers[name] = src;
           }
@@ -106,51 +104,90 @@ class ToolSchemaGenerator extends Generator {
       }
     }
 
-    // ── toolRegistry ─────────────────────────────────────────────────────────
+    // ── 1. Private _ToolRegistry subclass ────────────────────────────────────
     buffer.writeln(
-      '/// Maps tool names to handlers. Pass to your LLM agent loop.',
+      '/// Generated registry — provides named schema getters and tool dispatch.',
     );
-    buffer.writeln('final toolRegistry = ToolRegistry({');
+    buffer.writeln('final class _ToolRegistry extends ToolRegistry {');
+    buffer.writeln('  const _ToolRegistry(super.handlers, super.schemas);');
+    buffer.writeln();
 
     for (final fn in functions) {
       final toolName =
           fn.annotation.peek('name')?.stringValue ?? fn.element.name;
-      buffer.writeln("  '$toolName': (Map<String, dynamic> args) async {");
+      final dartName = fn.element.name; // always the Dart function name
+      buffer.writeln("  /// JSON Schema for [$dartName].");
+      buffer.writeln(
+        "  Map<String, dynamic> get $dartName => schemaFor('$toolName');",
+      );
+    }
 
-      // Build argument expressions
+    buffer.writeln('}');
+    buffer.writeln();
+
+    // ── 2. Build handlers map ─────────────────────────────────────────────────
+    final handlersBuffer = StringBuffer();
+    for (final fn in functions) {
+      final toolName =
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
+      handlersBuffer
+          .writeln("  '$toolName': (Map<String, dynamic> args) async {");
+
       final positionalArgs = <String>[];
       final namedArgs = <String>[];
-
       for (final param in fn.element.formalParameters) {
         final paramName = param.name;
         if (paramName == null) continue;
-
         final expr = typeMapper.generateArgParser(
           param.type,
           paramName,
           defaultCode: param.defaultValueCode,
         );
-
         if (param.isNamed) {
           namedArgs.add('$paramName: $expr');
         } else {
           positionalArgs.add(expr);
         }
       }
-
       final allArgs = [...positionalArgs, ...namedArgs].join(', ');
-      buffer.writeln('    return ${fn.element.name}($allArgs);');
-      buffer.writeln('  },');
+      handlersBuffer.writeln('    return ${fn.element.name}($allArgs);');
+      handlersBuffer.writeln('  },');
     }
 
-    buffer.writeln('});');
+    // ── 3. Build schemas map ──────────────────────────────────────────────────
+    final schemasBuffer = StringBuffer();
+    for (final fn in functions) {
+      final toolName =
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
+      final schemaVarName = '${fn.element.name}ToolSchema';
+      schemasBuffer.writeln("  '$toolName': $schemaVarName,");
+    }
+
+    // ── 4. Emit the toolRegistry instance ─────────────────────────────────────
+    buffer.writeln(
+      '/// The generated tool registry for this file.',
+    );
+    buffer.writeln(
+      '/// Use [toolRegistry.allSchemas] to pass all schemas to your LLM,',
+    );
+    buffer.writeln(
+      '/// and [toolRegistry.call] to dispatch model tool calls.',
+    );
+    buffer.writeln('final toolRegistry = _ToolRegistry(');
+    buffer.writeln('  // handlers');
+    buffer.writeln('  {');
+    buffer.write(handlersBuffer.toString());
+    buffer.writeln('  },');
+    buffer.writeln('  // schemas');
+    buffer.writeln('  {');
+    buffer.write(schemasBuffer.toString());
+    buffer.writeln('  },');
+    buffer.writeln(');');
     buffer.writeln();
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── 5. Private parse helpers ──────────────────────────────────────────────
     if (enumHelperNeeded.isNotEmpty) {
-      buffer.writeln(
-        '// ignore: unused_element',
-      );
+      buffer.writeln('// ignore: unused_element');
       buffer.writeln(
         'T _parseEnum<T extends Enum>(List<T> values, String? raw) =>',
       );
