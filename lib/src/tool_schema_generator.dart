@@ -28,49 +28,154 @@ class ToolSchemaGenerator extends Generator {
 
   @override
   String generate(LibraryReader library, BuildStep buildStep) {
-    final schemaVariableNames = <String>[];
-    final output = StringBuffer();
+    // Collected per-function data for schema + dispatcher generation
+    final functions = <({
+      TopLevelFunctionElement element,
+      ConstantReader annotation,
+    })>[];
 
-    // Iterate all top-level elements looking for @Tool() annotated functions
     for (final element in library.allElements) {
       if (element is! TopLevelFunctionElement) continue;
       if (!_toolTypeChecker.hasAnnotationOfExact(element)) continue;
-
       final annotation = _toolTypeChecker.firstAnnotationOfExact(element);
       if (annotation == null) continue;
-
-      final constantReader = ConstantReader(annotation);
-      final schemaCode = _generateSchemaForFunction(element, constantReader);
-
-      final schemaVarName = '${element.name}ToolSchema';
-      schemaVariableNames.add(schemaVarName);
-
-      output.writeln(schemaCode);
-      output.writeln();
+      functions.add((element: element, annotation: ConstantReader(annotation)));
     }
 
-    // If no tools were found, return empty (no output)
-    if (schemaVariableNames.isEmpty) {
-      return '';
+    if (functions.isEmpty) return '';
+
+    final typeMapper = TypeMapper();
+    final output = StringBuffer();
+    final schemaVarNames = <String>[];
+
+    // ── Schemas ──────────────────────────────────────────────────────────────
+    for (final fn in functions) {
+      final schemaCode = _generateSchemaForFunction(
+        fn.element,
+        fn.annotation,
+        typeMapper: typeMapper,
+      );
+      final schemaVarName = '${fn.element.name}ToolSchema';
+      schemaVarNames.add(schemaVarName);
+      output
+        ..writeln(schemaCode)
+        ..writeln();
     }
 
-    // Emit the aggregate list
+    // Aggregate list
     output.writeln('const allToolSchemas = <Map<String, dynamic>>[');
-    for (final name in schemaVariableNames) {
+    for (final name in schemaVarNames) {
       output.writeln('  $name,');
     }
     output.writeln('];');
+    output.writeln();
+
+    // ── Dispatcher ───────────────────────────────────────────────────────────
+    output.writeln(_generateDispatcher(functions, typeMapper));
 
     return output.toString();
+  }
+
+  /// Generates the `toolRegistry` constant and all required private helpers.
+  String _generateDispatcher(
+    List<({TopLevelFunctionElement element, ConstantReader annotation})> functions,
+    TypeMapper typeMapper,
+  ) {
+    final buffer = StringBuffer();
+
+    // Collect which enum / class types need helpers (deduplicated by name)
+    final enumHelperNeeded = <String>{};
+    final classHelpers = <String, String>{}; // className → generated source
+
+    for (final fn in functions) {
+      for (final param in fn.element.formalParameters) {
+        final element = param.type.element;
+        if (element is EnumElement && element.name != null) {
+          enumHelperNeeded.add(element.name!);
+        }
+        if (element is ClassElement && element.name != null) {
+          final name = element.name!;
+          // Only generate helpers for user-defined classes, not SDK types
+          final libUri = element.library.uri.toString();
+          final isSdkType = libUri.startsWith('dart:');
+          if (!isSdkType && !classHelpers.containsKey(name)) {
+            final src = typeMapper.generateClassParser(element);
+            if (src != null) classHelpers[name] = src;
+          }
+        }
+      }
+    }
+
+    // ── toolRegistry ─────────────────────────────────────────────────────────
+    buffer.writeln(
+      '/// Maps tool names to handlers. Pass to your LLM agent loop.',
+    );
+    buffer.writeln('final toolRegistry = ToolRegistry({');
+
+    for (final fn in functions) {
+      final toolName =
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
+      buffer.writeln("  '$toolName': (Map<String, dynamic> args) async {");
+
+      // Build argument expressions
+      final positionalArgs = <String>[];
+      final namedArgs = <String>[];
+
+      for (final param in fn.element.formalParameters) {
+        final paramName = param.name;
+        if (paramName == null) continue;
+
+        final expr = typeMapper.generateArgParser(
+          param.type,
+          paramName,
+          defaultCode: param.defaultValueCode,
+        );
+
+        if (param.isNamed) {
+          namedArgs.add('$paramName: $expr');
+        } else {
+          positionalArgs.add(expr);
+        }
+      }
+
+      final allArgs = [...positionalArgs, ...namedArgs].join(', ');
+      buffer.writeln('    return ${fn.element.name}($allArgs);');
+      buffer.writeln('  },');
+    }
+
+    buffer.writeln('});');
+    buffer.writeln();
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+    if (enumHelperNeeded.isNotEmpty) {
+      buffer.writeln(
+        '// ignore: unused_element',
+      );
+      buffer.writeln(
+        'T _parseEnum<T extends Enum>(List<T> values, String? raw) =>',
+      );
+      buffer.writeln(
+        "    values.firstWhere((e) => e.name == raw, orElse: () => values.first);",
+      );
+      buffer.writeln();
+    }
+
+    for (final src in classHelpers.values) {
+      buffer.writeln('// ignore: unused_element');
+      buffer.writeln(src);
+    }
+
+    return buffer.toString();
   }
 
   /// Generates a `const Map<String, dynamic>` schema for a single
   /// `@Tool()`-annotated function.
   String _generateSchemaForFunction(
     TopLevelFunctionElement functionElement,
-    ConstantReader annotation,
-  ) {
-    final typeMapper = TypeMapper();
+    ConstantReader annotation, {
+    TypeMapper? typeMapper,
+  }) {
+    typeMapper ??= TypeMapper();
 
     // --- Extract tool name ---
     final toolName =

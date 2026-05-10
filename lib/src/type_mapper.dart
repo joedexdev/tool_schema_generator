@@ -146,4 +146,136 @@ class TypeMapper {
       _processingStack.remove(className);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Dispatcher code generation
+  // ---------------------------------------------------------------------------
+
+  /// Generates a Dart expression that safely extracts and casts the value for
+  /// [fieldName] from an `args` map, for use in the generated dispatcher.
+  ///
+  /// [defaultCode] is the raw source string of the parameter's default value
+  /// (e.g. `'celsius'` or `true`) as reported by the analyzer. When provided,
+  /// a `?? defaultCode` fallback is appended for nullable/optional params.
+  String generateArgParser(
+    DartType type,
+    String fieldName, {
+    String? defaultCode,
+  }) {
+    final isNullable = type.nullabilitySuffix == NullabilitySuffix.question;
+    final rawAccess = "args['$fieldName']";
+
+    String withDefault(String expr) {
+      if (defaultCode != null && defaultCode.isNotEmpty) {
+        return '$expr ?? $defaultCode';
+      }
+      return expr;
+    }
+
+    if (type is VoidType || type is DynamicType) {
+      return withDefault('$rawAccess as dynamic');
+    }
+
+    final typeName = type.getDisplayString();
+    final baseTypeName =
+        typeName.endsWith('?') ? typeName.substring(0, typeName.length - 1) : typeName;
+    final nullableSuffix = isNullable ? '?' : '';
+
+    switch (baseTypeName) {
+      case 'String':
+        return withDefault('$rawAccess as String$nullableSuffix');
+      case 'int':
+        return withDefault('$rawAccess as int$nullableSuffix');
+      case 'bool':
+        return withDefault('$rawAccess as bool$nullableSuffix');
+      case 'num':
+        return withDefault('$rawAccess as num$nullableSuffix');
+      case 'double':
+        if (isNullable) {
+          return withDefault('($rawAccess as num?)?.toDouble()');
+        }
+        return withDefault('($rawAccess as num).toDouble()');
+    }
+
+    final element = type.element;
+
+    if (type.isDartCoreList && type is InterfaceType) {
+      final typeArgs = type.typeArguments;
+      if (typeArgs.isNotEmpty) {
+        final itemType = typeArgs.first.getDisplayString();
+        if (isNullable) {
+          return withDefault('($rawAccess as List?)?.cast<$itemType>()');
+        }
+        return withDefault('($rawAccess as List).cast<$itemType>()');
+      }
+      return withDefault('$rawAccess as List$nullableSuffix');
+    }
+
+    if (type.isDartCoreMap) {
+      return withDefault('$rawAccess as Map<String, dynamic>$nullableSuffix');
+    }
+
+    if (element is EnumElement) {
+      final enumName = element.name;
+      if (enumName == null) return withDefault('$rawAccess as dynamic');
+      if (isNullable) {
+        return withDefault('_parseEnum($enumName.values, $rawAccess as String?)');
+      }
+      return withDefault('_parseEnum($enumName.values, $rawAccess as String)');
+    }
+
+    if (element is ClassElement) {
+      final className = element.name;
+      if (className == null) return withDefault('$rawAccess as dynamic');
+      final cap = className[0].toUpperCase() + className.substring(1);
+      final helperName = '_parse$cap';
+      if (isNullable) {
+        return withDefault(
+          '$rawAccess != null ? $helperName($rawAccess as Map<String, dynamic>) : null',
+        );
+      }
+      return withDefault('$helperName($rawAccess as Map<String, dynamic>)');
+    }
+
+    return withDefault('$rawAccess as dynamic');
+  }
+
+  /// Generates the source for a `_parse<ClassName>` top-level helper that
+  /// reconstructs a class from a raw `Map<String, dynamic>`.
+  ///
+  /// Returns `null` if the class has no usable constructor.
+  String? generateClassParser(ClassElement classElement) {
+    final className = classElement.name;
+    if (className == null) return null;
+
+    final constructor =
+        classElement.unnamedConstructor ?? classElement.constructors.firstOrNull;
+    if (constructor == null) return null;
+
+    final cap = className[0].toUpperCase() + className.substring(1);
+    final helperName = '_parse$cap';
+    final buffer = StringBuffer();
+    buffer.writeln('$className $helperName(Map<String, dynamic> m) =>');
+    buffer.write('    $className(');
+
+    var first = true;
+    for (final param in constructor.formalParameters) {
+      if (!first) buffer.write(', ');
+      first = false;
+      final paramName = param.name ?? '';
+      // Reuse generateArgParser but with map variable `m` instead of `args`
+      final expr = generateArgParser(
+        param.type,
+        paramName,
+        defaultCode: param.defaultValueCode,
+      ).replaceAll("args['", "m['");
+      if (param.isNamed) {
+        buffer.write('$paramName: $expr');
+      } else {
+        buffer.write(expr);
+      }
+    }
+    buffer.writeln(');');
+    return buffer.toString();
+  }
 }
