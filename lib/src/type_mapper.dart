@@ -219,12 +219,11 @@ class TypeMapper {
     if (element is EnumElement) {
       final enumName = element.name;
       if (enumName == null) return withDefault('$rawAccess as dynamic');
-      if (isNullable) {
-        return withDefault(
-          '_parseEnum($enumName.values, $rawAccess as String?)',
-        );
-      }
-      return withDefault('_parseEnum($enumName.values, $rawAccess as String)');
+      
+      final hasDefault = defaultCode != null && defaultCode.isNotEmpty;
+      final castType = (isNullable || hasDefault) ? 'String?' : 'String';
+      
+      return withDefault('_parseEnum($enumName.values, $rawAccess as $castType)');
     }
 
     if (element is ClassElement) {

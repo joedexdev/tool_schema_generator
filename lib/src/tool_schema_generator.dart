@@ -185,10 +185,10 @@ class ToolSchemaGenerator extends Generator {
     if (enumHelperNeeded.isNotEmpty) {
       buffer.writeln('// ignore: unused_element');
       buffer.writeln(
-        'T _parseEnum<T extends Enum>(List<T> values, String? raw) =>',
+        'T? _parseEnum<T extends Enum>(List<T> values, String? raw) =>',
       );
       buffer.writeln(
-        "    values.firstWhere((e) => e.name == raw, orElse: () => values.first);",
+        "    raw == null ? null : values.firstWhere((e) => e.name == raw, orElse: () => values.first);",
       );
       buffer.writeln();
     }

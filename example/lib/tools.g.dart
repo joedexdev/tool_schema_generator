@@ -159,7 +159,7 @@ final toolRegistry = _ToolRegistry(
       return getWeather(
         args['city'] as String,
         unit:
-            _parseEnum(TemperatureUnit.values, args['unit'] as String) ??
+            _parseEnum(TemperatureUnit.values, args['unit'] as String?) ??
             TemperatureUnit.celsius,
       );
     },
@@ -196,8 +196,9 @@ final toolRegistry = _ToolRegistry(
 );
 
 // ignore: unused_element
-T _parseEnum<T extends Enum>(List<T> values, String? raw) =>
-    values.firstWhere((e) => e.name == raw, orElse: () => values.first);
+T? _parseEnum<T extends Enum>(List<T> values, String? raw) => raw == null
+    ? null
+    : values.firstWhere((e) => e.name == raw, orElse: () => values.first);
 
 // ignore: unused_element
 GeoLocation _parseGeoLocation(Map<String, dynamic> m) => GeoLocation(
