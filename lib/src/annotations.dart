@@ -1,7 +1,19 @@
+/// Provider schema shapes that can be generated for a tool.
+enum SchemaFlavor {
+  /// OpenAI function tool shape.
+  openAi,
+
+  /// Anthropic tool shape.
+  anthropic,
+
+  /// Gemini function declaration shape.
+  gemini,
+}
+
 /// Marks a top-level function as an LLM-callable tool.
 ///
-/// The generator will produce a `const Map<String, dynamic>` representing
-/// the tool schema in the standard OpenAI / Gemini function-calling format.
+/// The generator will produce provider-shaped tool schemas for the selected
+/// [flavors].
 ///
 /// By default, the function's Dart name is used as the tool name and its
 /// doc comment is used as the description. Both can be overridden via
@@ -30,8 +42,21 @@ class Tool {
   /// (with `///` prefixes stripped).
   final String? description;
 
+  /// Provider schema flavors generated for this tool.
+  ///
+  /// By default, the generator emits all supported provider shapes.
+  final List<SchemaFlavor> flavors;
+
   /// Creates a [Tool] annotation.
-  const Tool({this.name, this.description});
+  const Tool({
+    this.name,
+    this.description,
+    this.flavors = const [
+      SchemaFlavor.openAi,
+      SchemaFlavor.anthropic,
+      SchemaFlavor.gemini,
+    ],
+  });
 }
 
 /// Annotates a function parameter with a human-readable description
