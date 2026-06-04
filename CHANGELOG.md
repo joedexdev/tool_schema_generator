@@ -1,3 +1,22 @@
+## 0.4.0
+
+### Breaking
+
+* Replaced `ToolResult`, `ToolSuccess`, and `ToolError` dispatch results with raw `ToolRegistry.call` return values and typed exceptions.
+* Replaced `Map<String, dynamic>` dispatch arguments with `JsonObject` (`Map<String, Object?>`) in the public registry API and generated handlers.
+
+### Added
+
+* Added `SchemaFlavor` and `@Tool(flavors: [...])` for OpenAI, Anthropic, and Gemini provider-shaped schema generation.
+* Added `schemasFor(SchemaFlavor flavor)` and flavor-aware `schemaFor(name, flavor)` registry APIs.
+* Added centralized argument validation helpers and strict enum validation.
+* Added generator validation for duplicate tool names.
+
+### Fixed
+
+* Deduplicated repeated `@Tool(flavors: [...])` entries.
+* Generated enum parsing support for enum fields inside nested class parameters.
+
 ## 0.3.0
 
 ### Added
