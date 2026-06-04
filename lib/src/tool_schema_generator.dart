@@ -1,23 +1,14 @@
+import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
-import 'package:analyzer/dart/constant/value.dart';
 import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
 import 'package:tool_schema_generator/tool_schema_generator.dart';
 
 import 'type_mapper.dart';
 
-/// A [Generator] that scans all top-level functions annotated with `@Tool()`
-/// in a library and emits `const Map<String, dynamic>` tool schema definitions.
-///
-/// For each annotated function it:
-/// 1. Extracts the tool name (annotation override or function name)
-/// 2. Extracts the description (annotation override or doc comment)
-/// 3. Iterates parameters to build `properties` and `required` arrays
-/// 4. Emits a `const <functionName>ToolSchema` variable
-///
-/// After processing all annotated functions in a library, it emits a
-/// `const allToolSchemas` list aggregating every schema in the file.
+/// Scans top-level functions annotated with `@Tool()` and emits provider-shaped
+/// LLM tool schemas plus a generated dispatch registry.
 class ToolSchemaGenerator extends Generator {
   static final _toolTypeChecker = TypeChecker.typeNamed(
     Tool,
@@ -34,7 +25,6 @@ class ToolSchemaGenerator extends Generator {
 
   @override
   String generate(LibraryReader library, BuildStep buildStep) {
-    // Collected per-function data for schema + dispatcher generation
     final functions =
         <({TopLevelFunctionElement element, ConstantReader annotation})>[];
 
@@ -48,50 +38,49 @@ class ToolSchemaGenerator extends Generator {
     }
 
     if (functions.isEmpty) return '';
+    _validateUniqueToolNames(functions);
 
     final typeMapper = TypeMapper();
     final output = StringBuffer();
-    final schemaVarNames = <String>[];
+    final openAiSchemaVarNames = <String>[];
 
-    // ── Schemas ──────────────────────────────────────────────────────────────
     for (final fn in functions) {
-      final schemaCode = _generateSchemaForFunction(
-        fn.element,
-        fn.annotation,
-        typeMapper: typeMapper,
-      );
-      final schemaVarName = '${fn.element.name}ToolSchema';
-      schemaVarNames.add(schemaVarName);
+      final flavors = _readFlavors(fn.annotation);
+      if (flavors.contains(SchemaFlavor.openAi)) {
+        openAiSchemaVarNames.add('${fn.element.name}OpenAiToolSchema');
+      }
+
       output
-        ..writeln(schemaCode)
+        ..writeln(
+          _generateSchemasForFunction(
+            fn.element,
+            fn.annotation,
+            flavors,
+            typeMapper: typeMapper,
+          ),
+        )
         ..writeln();
     }
 
-    // Aggregate list
-    output.writeln('const allToolSchemas = <Map<String, dynamic>>[');
-    for (final name in schemaVarNames) {
+    output.writeln('const allToolSchemas = <JsonObject>[');
+    for (final name in openAiSchemaVarNames) {
       output.writeln('  $name,');
     }
     output.writeln('];');
     output.writeln();
 
-    // ── Dispatcher ───────────────────────────────────────────────────────────
     output.writeln(_generateDispatcher(functions, typeMapper));
-
     return output.toString();
   }
 
-  /// Generates the `_ToolRegistry` subclass and `toolRegistry` instance.
   String _generateDispatcher(
     List<({TopLevelFunctionElement element, ConstantReader annotation})>
     functions,
     TypeMapper typeMapper,
   ) {
     final buffer = StringBuffer();
-
-    // Collect enum / class types that need helpers (deduplicated by name)
     final enumHelperNeeded = <String>{};
-    final classHelpers = <String, String>{}; // className → generated source
+    final classHelpers = <String, String>{};
 
     for (final fn in functions) {
       for (final param in fn.element.formalParameters) {
@@ -110,35 +99,30 @@ class ToolSchemaGenerator extends Generator {
       }
     }
 
-    // ── 1. Private _ToolRegistry subclass ────────────────────────────────────
     buffer.writeln(
-      '/// Generated registry — provides named schema getters and tool dispatch.',
+      '/// Generated registry - provides named schema getters and tool dispatch.',
     );
     buffer.writeln('final class _ToolRegistry extends ToolRegistry {');
     buffer.writeln('  const _ToolRegistry(super.handlers, super.schemas);');
     buffer.writeln();
 
     for (final fn in functions) {
+      if (!_readFlavors(fn.annotation).contains(SchemaFlavor.openAi)) continue;
       final toolName =
-          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
-      final dartName = fn.element.name; // always the Dart function name
-      buffer.writeln("  /// JSON Schema for [$dartName].");
-      buffer.writeln(
-        "  Map<String, dynamic> get $dartName => schemaFor('$toolName');",
-      );
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name!;
+      final dartName = fn.element.name;
+      buffer.writeln("  /// OpenAI-compatible schema for [$dartName].");
+      buffer.writeln("  JsonObject get $dartName => schemaFor('$toolName');");
     }
 
     buffer.writeln('}');
     buffer.writeln();
 
-    // ── 2. Build handlers map ─────────────────────────────────────────────────
     final handlersBuffer = StringBuffer();
     for (final fn in functions) {
       final toolName =
-          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
-      handlersBuffer.writeln(
-        "  '$toolName': (Map<String, dynamic> args) async {",
-      );
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name!;
+      handlersBuffer.writeln("  '$toolName': (JsonObject args) async {");
 
       final positionalArgs = <String>[];
       final namedArgs = <String>[];
@@ -149,6 +133,7 @@ class ToolSchemaGenerator extends Generator {
           param.type,
           paramName,
           defaultCode: param.defaultValueCode,
+          isRequired: param.isRequiredPositional || param.isRequiredNamed,
         );
         if (param.isNamed) {
           namedArgs.add('$paramName: $expr');
@@ -161,42 +146,58 @@ class ToolSchemaGenerator extends Generator {
       handlersBuffer.writeln('  },');
     }
 
-    // ── 3. Build schemas map ──────────────────────────────────────────────────
     final schemasBuffer = StringBuffer();
-    for (final fn in functions) {
-      final toolName =
-          fn.annotation.peek('name')?.stringValue ?? fn.element.name;
-      final schemaVarName = '${fn.element.name}ToolSchema';
-      schemasBuffer.writeln("  '$toolName': $schemaVarName,");
+    for (final flavor in SchemaFlavor.values) {
+      schemasBuffer.writeln(
+        '  SchemaFlavor.${flavor.name}: <String, JsonObject>{',
+      );
+      for (final fn in functions) {
+        final flavors = _readFlavors(fn.annotation);
+        if (!flavors.contains(flavor)) continue;
+        final toolName =
+            fn.annotation.peek('name')?.stringValue ?? fn.element.name;
+        final schemaVarName =
+            '${fn.element.name}${_flavorSuffix(flavor)}ToolSchema';
+        schemasBuffer.writeln("    '$toolName': $schemaVarName,");
+      }
+      schemasBuffer.writeln('  },');
     }
 
-    // ── 4. Emit the toolRegistry instance ─────────────────────────────────────
     buffer.writeln('/// The generated tool registry for this file.');
     buffer.writeln(
-      '/// Use [toolRegistry.allSchemas] to pass all schemas to your LLM,',
+      '/// Use [toolRegistry.schemasFor] to select provider schemas,',
     );
     buffer.writeln('/// and [toolRegistry.call] to dispatch model tool calls.');
     buffer.writeln('final toolRegistry = _ToolRegistry(');
-    buffer.writeln('  // handlers');
     buffer.writeln('  {');
     buffer.write(handlersBuffer.toString());
     buffer.writeln('  },');
-    buffer.writeln('  // schemas');
     buffer.writeln('  {');
     buffer.write(schemasBuffer.toString());
     buffer.writeln('  },');
     buffer.writeln(');');
     buffer.writeln();
 
-    // ── 5. Private parse helpers ──────────────────────────────────────────────
-    if (enumHelperNeeded.isNotEmpty) {
+    if (enumHelperNeeded.isNotEmpty || classHelpers.isNotEmpty) {
       buffer.writeln('// ignore: unused_element');
+      buffer.writeln('T? _parseEnum<T extends Enum>(');
+      buffer.writeln('  List<T> values,');
+      buffer.writeln('  String? raw,');
+      buffer.writeln('  String field,');
+      buffer.writeln(') {');
+      buffer.writeln('  if (raw == null) return null;');
+      buffer.writeln('  for (final value in values) {');
+      buffer.writeln('    if (value.name == raw) return value;');
+      buffer.writeln('  }');
+      buffer.writeln('  throw InvalidToolArgumentException(');
+      buffer.writeln('    field: field,');
       buffer.writeln(
-        'T? _parseEnum<T extends Enum>(List<T> values, String? raw) =>',
+        "    message: 'Invalid enum value \"\$raw\" for \"\$field\".',",
       );
-      buffer.writeln(
-        "    raw == null ? null : values.firstWhere((e) => e.name == raw, orElse: () => values.first);",
-      );
+      buffer.writeln('    expected: values.map((e) => e.name).toList(),');
+      buffer.writeln('    actual: raw,');
+      buffer.writeln('  );');
+      buffer.writeln('}');
       buffer.writeln();
     }
 
@@ -208,31 +209,25 @@ class ToolSchemaGenerator extends Generator {
     return buffer.toString();
   }
 
-  /// Generates a `const Map<String, dynamic>` schema for a single
-  /// `@Tool()`-annotated function.
-  String _generateSchemaForFunction(
+  String _generateSchemasForFunction(
     TopLevelFunctionElement functionElement,
-    ConstantReader annotation, {
+    ConstantReader annotation,
+    List<SchemaFlavor> flavors, {
     TypeMapper? typeMapper,
   }) {
     typeMapper ??= TypeMapper();
 
-    // --- Extract tool name ---
     final toolName =
         annotation.peek('name')?.stringValue ?? functionElement.name;
-
-    // --- Extract description ---
-    final descriptionOverride = annotation.peek('description')?.stringValue;
     final description =
-        descriptionOverride ?? _extractDocComment(functionElement);
+        annotation.peek('description')?.stringValue ??
+        _extractDocComment(functionElement);
 
-    // --- Build parameters schema ---
-    final parameters = functionElement.formalParameters;
     final propertiesBuffer = StringBuffer();
     final requiredParameterNames = <String>[];
     var isFirstProperty = true;
 
-    for (final param in parameters) {
+    for (final param in functionElement.formalParameters) {
       final paramName = param.name;
       if (paramName == null) continue;
       if (_hasAnnotation(param, _injectTypeChecker)) continue;
@@ -243,67 +238,74 @@ class ToolSchemaGenerator extends Generator {
       isFirstProperty = false;
 
       final paramTypeSchema = typeMapper.mapType(param.type);
-
-      // Check for @Describe annotation on the parameter
       final describeAnnotation = _findDescribeAnnotation(param);
+      final schemaLiteral = describeAnnotation == null
+          ? paramTypeSchema
+          : _injectDescription(paramTypeSchema, describeAnnotation);
+      propertiesBuffer.write("        '$paramName': $schemaLiteral");
 
-      if (describeAnnotation != null) {
-        // Inject description into the type schema map
-        final schemaWithDescription = _injectDescription(
-          paramTypeSchema,
-          describeAnnotation,
-        );
-        propertiesBuffer.write("        '$paramName': $schemaWithDescription");
-      } else {
-        propertiesBuffer.write("        '$paramName': $paramTypeSchema");
-      }
-
-      // Determine if required:
-      // - Positional parameters are always required
-      // - Named parameters are required only if they have the `required` keyword
       if (param.isRequiredPositional || param.isRequiredNamed) {
         requiredParameterNames.add(paramName);
       }
     }
 
-    // --- Build the required array ---
     final requiredPart = requiredParameterNames.isNotEmpty
         ? "\n      'required': <String>[${requiredParameterNames.map((name) => "'$name'").join(', ')}],"
         : '';
 
-    // --- Generate the schema variable name ---
-    final schemaVarName = '${functionElement.name}ToolSchema';
+    final parametersSchema = StringBuffer();
+    parametersSchema.writeln('<String, Object?>{');
+    parametersSchema.writeln("      'type': 'object',");
+    parametersSchema.writeln("      'properties': <String, Object?>{");
+    parametersSchema.write(propertiesBuffer.toString());
+    parametersSchema.writeln();
+    parametersSchema.writeln('      },');
+    parametersSchema.write('      $requiredPart');
+    parametersSchema.writeln();
+    parametersSchema.write('    }');
 
-    // --- Emit the const Map ---
     final buffer = StringBuffer();
-    buffer.writeln('const $schemaVarName = <String, dynamic>{');
-    buffer.writeln("  'type': 'function',");
-    buffer.writeln("  'function': <String, dynamic>{");
-    buffer.writeln("    'name': '$toolName',");
-    buffer.writeln("    'description': '${_escapeString(description)}',");
-    buffer.writeln("    'parameters': <String, dynamic>{");
-    buffer.writeln("      'type': 'object',");
-    buffer.writeln("      'properties': <String, dynamic>{");
-    buffer.write(propertiesBuffer.toString());
-    buffer.writeln();
-    buffer.writeln('      },');
-    buffer.write('      $requiredPart');
-    buffer.writeln();
-    buffer.writeln('    },');
-    buffer.writeln('  },');
-    buffer.writeln('};');
+    for (final flavor in flavors) {
+      final schemaVarName =
+          '${functionElement.name}${_flavorSuffix(flavor)}ToolSchema';
+      buffer.writeln('const $schemaVarName = <String, Object?>{');
+      switch (flavor) {
+        case SchemaFlavor.openAi:
+          buffer.writeln("  'type': 'function',");
+          buffer.writeln("  'function': <String, Object?>{");
+          buffer.writeln("    'name': '$toolName',");
+          buffer.writeln("    'description': '${_escapeString(description)}',");
+          buffer.writeln("    'parameters': $parametersSchema,");
+          buffer.writeln('  },');
+        case SchemaFlavor.anthropic:
+          buffer.writeln("  'name': '$toolName',");
+          buffer.writeln("  'description': '${_escapeString(description)}',");
+          buffer.writeln("  'input_schema': $parametersSchema,");
+        case SchemaFlavor.gemini:
+          buffer.writeln("  'name': '$toolName',");
+          buffer.writeln("  'description': '${_escapeString(description)}',");
+          buffer.writeln("  'parameters': $parametersSchema,");
+      }
+      buffer.writeln('};');
+      buffer.writeln();
+    }
+
+    if (flavors.contains(SchemaFlavor.openAi)) {
+      buffer.writeln(
+        'const ${functionElement.name}ToolSchema = '
+        '${functionElement.name}OpenAiToolSchema;',
+      );
+    }
 
     return buffer.toString();
   }
 
-  /// Extracts the doc comment from an element, stripping `///` prefixes.
   String _extractDocComment(Element element) {
     final rawComment = element.documentationComment;
     if (rawComment == null || rawComment.isEmpty) {
       return '';
     }
 
-    // Strip /// prefixes and join lines
     final lines = rawComment.split('\n').map((line) {
       var trimmed = line.trimLeft();
       if (trimmed.startsWith('/// ')) {
@@ -317,7 +319,6 @@ class ToolSchemaGenerator extends Generator {
     return lines.join('\n');
   }
 
-  /// Searches for a `@Describe` annotation on a [FormalParameterElement].
   String? _findDescribeAnnotation(FormalParameterElement param) {
     final annotationValue = _findAnnotation(param, _describeTypeChecker);
     return annotationValue?.getField('description')?.toStringValue();
@@ -360,6 +361,28 @@ class ToolSchemaGenerator extends Generator {
     }
   }
 
+  void _validateUniqueToolNames(
+    List<({TopLevelFunctionElement element, ConstantReader annotation})>
+    functions,
+  ) {
+    final seen = <String, TopLevelFunctionElement>{};
+
+    for (final fn in functions) {
+      final toolName =
+          fn.annotation.peek('name')?.stringValue ?? fn.element.name!;
+      final previous = seen[toolName];
+      if (previous != null) {
+        throw InvalidGenerationSourceError(
+          'Duplicate tool name "$toolName".',
+          element: fn.element,
+          todo:
+              'Give "${fn.element.name}" or "${previous.name}" a unique @Tool(name: ...).',
+        );
+      }
+      seen[toolName] = fn.element;
+    }
+  }
+
   bool _hasAnnotation(FormalParameterElement param, TypeChecker typeChecker) =>
       _findAnnotation(param, typeChecker) != null;
 
@@ -379,21 +402,37 @@ class ToolSchemaGenerator extends Generator {
     return null;
   }
 
-  /// Injects a `'description'` key into a JSON Schema map literal string.
   String _injectDescription(String schemaLiteral, String description) {
-    // Insert after the opening brace of the map
     return schemaLiteral.replaceFirst(
-      '<String, dynamic>{',
-      "<String, dynamic>{'description': '${_escapeString(description)}', ",
+      '<String, Object?>{',
+      "<String, Object?>{'description': '${_escapeString(description)}', ",
     );
   }
 
-  /// Escapes single quotes, backslashes, and newlines for safe embedding
-  /// in single-quoted Dart string literals.
   String _escapeString(String input) {
     return input
         .replaceAll('\\', '\\\\')
         .replaceAll("'", "\\'")
         .replaceAll('\n', '\\n');
   }
+
+  List<SchemaFlavor> _readFlavors(ConstantReader annotation) {
+    final values = annotation.peek('flavors')?.listValue;
+    if (values == null) return SchemaFlavor.values;
+
+    final flavors = <SchemaFlavor>{};
+    for (final value in values) {
+      final index = value.getField('index')?.toIntValue();
+      if (index != null && index >= 0 && index < SchemaFlavor.values.length) {
+        flavors.add(SchemaFlavor.values[index]);
+      }
+    }
+    return flavors.toList();
+  }
+
+  String _flavorSuffix(SchemaFlavor flavor) => switch (flavor) {
+    SchemaFlavor.openAi => 'OpenAi',
+    SchemaFlavor.anthropic => 'Anthropic',
+    SchemaFlavor.gemini => 'Gemini',
+  };
 }

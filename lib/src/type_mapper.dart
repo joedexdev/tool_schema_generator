@@ -2,16 +2,16 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 
-/// Maps Dart types to JSON Schema Draft 2020-12 compatible type representations.
+/// Maps Dart types to provider-compatible JSON object schema representations.
 ///
-/// Returns a Dart source string that represents a `Map<String, dynamic>` literal
+/// Returns a Dart source string that represents a JSON object map literal
 /// suitable for embedding in generated code.
 class TypeMapper {
   /// Set of class types already being processed, used to prevent infinite
   /// recursion when a class references itself.
   final Set<String> _processingStack = {};
 
-  /// Converts a [DartType] to a JSON Schema map literal string.
+  /// Converts a [DartType] to a JSON object schema map literal string.
   ///
   /// Handles:
   /// - Primitive types (`String`, `int`, `double`, `num`, `bool`)
@@ -27,8 +27,8 @@ class TypeMapper {
     if (isNullable && !coreSchema.contains("'nullable': true")) {
       // Insert nullable flag into the schema map
       return coreSchema.replaceFirst(
-        '<String, dynamic>{',
-        "<String, dynamic>{'nullable': true, ",
+        '<String, Object?>{',
+        "<String, Object?>{'nullable': true, ",
       );
     }
 
@@ -41,7 +41,7 @@ class TypeMapper {
 
     // Check for void / dynamic
     if (type is VoidType || type is DynamicType) {
-      return "<String, dynamic>{'type': 'string'}";
+      return "<String, Object?>{'type': 'string'}";
     }
 
     // Check primitive types by name
@@ -52,15 +52,15 @@ class TypeMapper {
 
     switch (baseTypeName) {
       case 'String':
-        return "<String, dynamic>{'type': 'string'}";
+        return "<String, Object?>{'type': 'string'}";
       case 'int':
-        return "<String, dynamic>{'type': 'integer'}";
+        return "<String, Object?>{'type': 'integer'}";
       case 'double':
-        return "<String, dynamic>{'type': 'number'}";
+        return "<String, Object?>{'type': 'number'}";
       case 'num':
-        return "<String, dynamic>{'type': 'number'}";
+        return "<String, Object?>{'type': 'number'}";
       case 'bool':
-        return "<String, dynamic>{'type': 'boolean'}";
+        return "<String, Object?>{'type': 'boolean'}";
     }
 
     // Check for List<T>
@@ -68,14 +68,14 @@ class TypeMapper {
       final typeArgs = type.typeArguments;
       if (typeArgs.isNotEmpty) {
         final itemsSchema = mapType(typeArgs.first);
-        return "<String, dynamic>{'type': 'array', 'items': $itemsSchema}";
+        return "<String, Object?>{'type': 'array', 'items': $itemsSchema}";
       }
-      return "<String, dynamic>{'type': 'array'}";
+      return "<String, Object?>{'type': 'array'}";
     }
 
     // Check for Map<String, T>
     if (type.isDartCoreMap) {
-      return "<String, dynamic>{'type': 'object'}";
+      return "<String, Object?>{'type': 'object'}";
     }
 
     // Check for enum types
@@ -84,7 +84,7 @@ class TypeMapper {
           .where((field) => field.isEnumConstant)
           .map((field) => "'${field.name}'")
           .join(', ');
-      return "<String, dynamic>{'type': 'string', 'enum': <String>[$enumValues]}";
+      return "<String, Object?>{'type': 'string', 'enum': <String>[$enumValues]}";
     }
 
     // Check for custom class types (nested objects)
@@ -93,7 +93,7 @@ class TypeMapper {
     }
 
     // Fallback
-    return "<String, dynamic>{'type': 'string'}";
+    return "<String, Object?>{'type': 'string'}";
   }
 
   /// Maps a [ClassElement] to a JSON Schema "object" type with properties
@@ -103,7 +103,7 @@ class TypeMapper {
 
     // Prevent infinite recursion for self-referencing types
     if (className == null || _processingStack.contains(className)) {
-      return "<String, dynamic>{'type': 'object', 'description': '${className ?? 'unknown'} (circular reference)'}";
+      return "<String, Object?>{'type': 'object', 'description': '${className ?? 'unknown'} (circular reference)'}";
     }
 
     _processingStack.add(className);
@@ -115,7 +115,7 @@ class TypeMapper {
           classElement.constructors.firstOrNull;
 
       if (constructor == null) {
-        return "<String, dynamic>{'type': 'object'}";
+        return "<String, Object?>{'type': 'object'}";
       }
 
       final propertiesBuffer = StringBuffer();
@@ -141,7 +141,7 @@ class TypeMapper {
           ? ", 'required': <String>[${requiredParams.join(', ')}]"
           : '';
 
-      return "<String, dynamic>{'type': 'object', 'properties': <String, dynamic>{$propertiesBuffer}$requiredPart}";
+      return "<String, Object?>{'type': 'object', 'properties': <String, Object?>{$propertiesBuffer}$requiredPart}";
     } finally {
       _processingStack.remove(className);
     }
@@ -161,42 +161,51 @@ class TypeMapper {
     DartType type,
     String fieldName, {
     String? defaultCode,
+    required bool isRequired,
+    String sourceName = 'args',
   }) {
-    final isNullable = type.nullabilitySuffix == NullabilitySuffix.question;
     final hasDefault = defaultCode != null && defaultCode.isNotEmpty;
-    final rawAccess = "args['$fieldName']";
+    final accessor = "ToolRegistry";
 
-    String withDefault(String expr) {
+    String readValue(String typeName) {
       if (hasDefault) {
-        return '($expr) ?? $defaultCode';
+        return '$accessor.getArgOrDefault<$typeName>($sourceName, \'$fieldName\', $defaultCode)';
       }
-      return expr;
+      if (isRequired) {
+        return '$accessor.getRequiredArg<$typeName>($sourceName, \'$fieldName\')';
+      }
+      return '$accessor.getOptionalArg<$typeName>($sourceName, \'$fieldName\')';
     }
 
     if (type is VoidType || type is DynamicType) {
-      return withDefault('$rawAccess as dynamic');
+      if (hasDefault) return '$sourceName[\'$fieldName\'] ?? $defaultCode';
+      if (isRequired) {
+        return '$accessor.getRequiredArg<Object?>($sourceName, \'$fieldName\')';
+      }
+      return '$sourceName[\'$fieldName\']';
     }
 
     final typeName = type.getDisplayString();
     final baseTypeName = typeName.endsWith('?')
         ? typeName.substring(0, typeName.length - 1)
         : typeName;
-    final nullableSuffix = (isNullable || hasDefault) ? '?' : '';
-
     switch (baseTypeName) {
       case 'String':
-        return withDefault('$rawAccess as String$nullableSuffix');
+        return readValue('String');
       case 'int':
-        return withDefault('$rawAccess as int$nullableSuffix');
+        return readValue('int');
       case 'bool':
-        return withDefault('$rawAccess as bool$nullableSuffix');
+        return readValue('bool');
       case 'num':
-        return withDefault('$rawAccess as num$nullableSuffix');
+        return readValue('num');
       case 'double':
-        if (isNullable || hasDefault) {
-          return withDefault('($rawAccess as num?)?.toDouble()');
+        if (hasDefault) {
+          return '($accessor.getOptionalDoubleArg($sourceName, \'$fieldName\') ?? $defaultCode)';
         }
-        return withDefault('($rawAccess as num).toDouble()');
+        if (isRequired) {
+          return '$accessor.getRequiredDoubleArg($sourceName, \'$fieldName\')';
+        }
+        return '$accessor.getOptionalDoubleArg($sourceName, \'$fieldName\')';
     }
 
     final element = type.element;
@@ -205,47 +214,81 @@ class TypeMapper {
       final typeArgs = type.typeArguments;
       if (typeArgs.isNotEmpty) {
         final itemType = typeArgs.first.getDisplayString();
-        if (isNullable || hasDefault) {
-          return withDefault('($rawAccess as List?)?.cast<$itemType>()');
+        if (hasDefault) {
+          return '($accessor.getOptionalListArg<$itemType>($sourceName, \'$fieldName\') ?? $defaultCode)';
         }
-        return withDefault('($rawAccess as List).cast<$itemType>()');
+        if (isRequired) {
+          return '$accessor.getRequiredListArg<$itemType>($sourceName, \'$fieldName\')';
+        }
+        return '$accessor.getOptionalListArg<$itemType>($sourceName, \'$fieldName\')';
       }
-      return withDefault('$rawAccess as List$nullableSuffix');
+      if (hasDefault) {
+        return '$accessor.getArgOrDefault<List<Object?>>($sourceName, \'$fieldName\', $defaultCode)';
+      }
+      if (isRequired) {
+        return '$accessor.getRequiredArg<List<Object?>>($sourceName, \'$fieldName\')';
+      }
+      return '$accessor.getOptionalArg<List<Object?>>($sourceName, \'$fieldName\')';
     }
 
     if (type.isDartCoreMap) {
-      return withDefault('$rawAccess as Map<String, dynamic>$nullableSuffix');
+      if (hasDefault) {
+        return '$accessor.getOptionalObjectArg($sourceName, \'$fieldName\') ?? $defaultCode';
+      }
+      if (isRequired) {
+        return '$accessor.getRequiredObjectArg($sourceName, \'$fieldName\')';
+      }
+      return '$accessor.getOptionalObjectArg($sourceName, \'$fieldName\')';
     }
 
     if (element is EnumElement) {
       final enumName = element.name;
-      if (enumName == null) return withDefault('$rawAccess as dynamic');
+      if (enumName == null) {
+        if (hasDefault) return '$sourceName[\'$fieldName\'] ?? $defaultCode';
+        if (isRequired) {
+          return '$accessor.getRequiredArg<Object?>($sourceName, \'$fieldName\')';
+        }
+        return '$sourceName[\'$fieldName\']';
+      }
 
-      final castType = (isNullable || hasDefault) ? 'String?' : 'String';
-
-      return withDefault(
-        '_parseEnum($enumName.values, $rawAccess as $castType)',
-      );
+      final raw = hasDefault || !isRequired
+          ? '$accessor.getOptionalArg<String>($sourceName, \'$fieldName\')'
+          : '$accessor.getRequiredArg<String>($sourceName, \'$fieldName\')';
+      if (hasDefault) {
+        return '_parseEnum($enumName.values, $raw, \'$fieldName\') ?? $defaultCode';
+      }
+      return '_parseEnum($enumName.values, $raw, \'$fieldName\')';
     }
 
     if (element is ClassElement) {
       final className = element.name;
-      if (className == null) return withDefault('$rawAccess as dynamic');
+      if (className == null) {
+        if (hasDefault) return '$sourceName[\'$fieldName\'] ?? $defaultCode';
+        if (isRequired) {
+          return '$accessor.getRequiredArg<Object?>($sourceName, \'$fieldName\')';
+        }
+        return '$sourceName[\'$fieldName\']';
+      }
       final cap = className[0].toUpperCase() + className.substring(1);
       final helperName = '_parse$cap';
-      if (isNullable || hasDefault) {
-        return withDefault(
-          '$rawAccess != null ? $helperName($rawAccess as Map<String, dynamic>) : null',
-        );
+      if (hasDefault) {
+        return '($accessor.getOptionalObjectArg($sourceName, \'$fieldName\') != null ? $helperName($accessor.getRequiredObjectArg($sourceName, \'$fieldName\')) : $defaultCode)';
       }
-      return withDefault('$helperName($rawAccess as Map<String, dynamic>)');
+      if (isRequired) {
+        return '$helperName($accessor.getRequiredObjectArg($sourceName, \'$fieldName\'))';
+      }
+      return '($accessor.getOptionalObjectArg($sourceName, \'$fieldName\') != null ? $helperName($accessor.getRequiredObjectArg($sourceName, \'$fieldName\')) : null)';
     }
 
-    return withDefault('$rawAccess as dynamic');
+    if (hasDefault) return '$sourceName[\'$fieldName\'] ?? $defaultCode';
+    if (isRequired) {
+      return '$accessor.getRequiredArg<Object?>($sourceName, \'$fieldName\')';
+    }
+    return '$sourceName[\'$fieldName\']';
   }
 
   /// Generates the source for a `_parse<ClassName>` top-level helper that
-  /// reconstructs a class from a raw `Map<String, dynamic>`.
+  /// reconstructs a class from a raw [JsonObject].
   ///
   /// Returns `null` if the class has no usable constructor.
   String? generateClassParser(ClassElement classElement) {
@@ -260,7 +303,7 @@ class TypeMapper {
     final cap = className[0].toUpperCase() + className.substring(1);
     final helperName = '_parse$cap';
     final buffer = StringBuffer();
-    buffer.writeln('$className $helperName(Map<String, dynamic> m) =>');
+    buffer.writeln('$className $helperName(JsonObject m) =>');
     buffer.write('    $className(');
 
     var first = true;
@@ -273,7 +316,9 @@ class TypeMapper {
         param.type,
         paramName,
         defaultCode: param.defaultValueCode,
-      ).replaceAll("args['", "m['");
+        isRequired: param.isRequired,
+        sourceName: 'm',
+      );
       if (param.isNamed) {
         buffer.write('$paramName: $expr');
       } else {

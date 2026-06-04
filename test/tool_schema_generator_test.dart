@@ -397,6 +397,45 @@ void main() {
       );
     });
 
+    test(
+      'generates enum parser for enum fields inside class parameters',
+      () async {
+        await testBuilder(
+          _makeBuilder(),
+          {
+            'tool_schema_generator|lib/tool_schema_generator.dart':
+                _annotationSource,
+            '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            enum Priority { low, medium, high }
+
+            class Task {
+              final String title;
+              final Priority priority;
+              const Task({required this.title, required this.priority});
+            }
+
+            @Tool()
+            void create(Task task) {}
+          ''',
+          },
+          generateFor: {'_test|lib/test.dart'},
+          outputs: {
+            '_test|lib/test.tool_schema.g.part': decodedMatches(
+              allOf([
+                contains('T? _parseEnum<T extends Enum>('),
+                contains('_parseEnum('),
+                contains('Priority.values'),
+                contains("'priority': <String, Object?>"),
+              ]),
+            ),
+          },
+        );
+      },
+    );
+
     // ------------------------------------------------------------------
     // List<String> parameter
     // ------------------------------------------------------------------
@@ -488,8 +527,12 @@ void main() {
                 contains("'required': <String>['title']"),
                 isNot(contains("'userId':")),
                 isNot(contains("'locale':")),
-                contains("userId: args['userId'] as String?"),
-                contains("locale: (args['locale'] as String?) ?? 'en'"),
+                contains(
+                  "userId: ToolRegistry.getOptionalArg<String>(args, 'userId')",
+                ),
+                contains(
+                  "locale: ToolRegistry.getArgOrDefault<String>(args, 'locale', 'en')",
+                ),
               ]),
             ),
           },
@@ -517,7 +560,7 @@ void main() {
             allOf([
               contains("'host':"),
               isNot(contains("'timeoutSeconds':")),
-              contains("timeoutSeconds: args['timeoutSeconds'] as int?"),
+              contains("timeoutSeconds: ToolRegistry.getOptionalArg<int>("),
             ]),
           ),
         },
@@ -598,6 +641,33 @@ void main() {
       );
     });
 
+    test('rejects duplicate effective tool names', () async {
+      final result = await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+              import 'package:tool_schema_generator/tool_schema_generator.dart';
+              part 'test.g.dart';
+
+              @Tool(name: 'lookup')
+              void lookupUser() {}
+
+              @Tool(name: 'lookup')
+              void lookupOrder() {}
+            ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+      );
+
+      expect(result.succeeded, isFalse);
+      expect(
+        result.errors.join('\n'),
+        contains('Duplicate tool name "lookup".'),
+      );
+    });
+
     // ------------------------------------------------------------------
     // Multiple @Tool functions → allToolSchemas
     // ------------------------------------------------------------------
@@ -629,13 +699,112 @@ void main() {
               contains("const betaToolSchema"),
               contains("const gammaToolSchema"),
               contains("const allToolSchemas"),
-              contains("alphaToolSchema,"),
-              contains("betaToolSchema,"),
-              contains("gammaToolSchema,"),
+              contains("alphaOpenAiToolSchema,"),
+              contains("betaOpenAiToolSchema,"),
+              contains("gammaOpenAiToolSchema,"),
+              contains("SchemaFlavor.openAi: <String, JsonObject>"),
+              contains("SchemaFlavor.anthropic: <String, JsonObject>"),
+              contains("SchemaFlavor.gemini: <String, JsonObject>"),
               // Each tool gets a named getter on the subclass
               contains("get alpha => schemaFor('alpha')"),
               contains("get beta => schemaFor('beta')"),
               contains("get gamma => schemaFor('gamma')"),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test('generates only selected schema flavors', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(flavors: [SchemaFlavor.anthropic])
+            void claudeOnly(String query) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains('const claudeOnlyAnthropicToolSchema'),
+              contains("'input_schema': <String, Object?>"),
+              isNot(contains('const claudeOnlyOpenAiToolSchema')),
+              isNot(contains('const claudeOnlyGeminiToolSchema')),
+              isNot(contains('const claudeOnlyToolSchema')),
+              contains('const allToolSchemas = <JsonObject>[];'),
+              isNot(contains("get claudeOnly => schemaFor('claudeOnly')")),
+              contains("SchemaFlavor.openAi: <String, JsonObject>{}"),
+              contains("SchemaFlavor.anthropic: <String, JsonObject>"),
+              contains("'claudeOnly': claudeOnlyAnthropicToolSchema"),
+              contains("SchemaFlavor.gemini: <String, JsonObject>{}"),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test('deduplicates repeated schema flavors', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(flavors: [SchemaFlavor.openAi, SchemaFlavor.openAi])
+            void search(String query) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains('const searchOpenAiToolSchema'),
+              isNot(contains('const searchAnthropicToolSchema')),
+              isNot(contains('const searchGeminiToolSchema')),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test('respects an explicit empty schema flavors list', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(flavors: [])
+            void dispatchOnly(String query) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              isNot(contains('dispatchOnlyOpenAiToolSchema')),
+              isNot(contains('dispatchOnlyAnthropicToolSchema')),
+              isNot(contains('dispatchOnlyGeminiToolSchema')),
+              isNot(contains('dispatchOnlyToolSchema')),
+              isNot(contains("get dispatchOnly => schemaFor('dispatchOnly')")),
+              contains('const allToolSchemas = <JsonObject>[];'),
+              contains("'dispatchOnly': (JsonObject args) async"),
+              contains("SchemaFlavor.openAi: <String, JsonObject>{}"),
+              contains("SchemaFlavor.anthropic: <String, JsonObject>{}"),
+              contains("SchemaFlavor.gemini: <String, JsonObject>{}"),
             ]),
           ),
         },
@@ -670,9 +839,9 @@ void main() {
                 // Getter uses the Dart function name
                 contains("get myTool => schemaFor('custom_name')"),
                 // Handlers map uses the overridden name
-                contains("'custom_name': (Map<String, dynamic> args)"),
+                contains("'custom_name': (JsonObject args)"),
                 // Schemas map also uses overridden name
-                contains("'custom_name': myToolToolSchema"),
+                contains("'custom_name': myToolOpenAiToolSchema"),
               ]),
             ),
           },
@@ -709,11 +878,11 @@ void main() {
               // Registry constructed with _ToolRegistry
               contains("final toolRegistry = _ToolRegistry("),
               // Handlers map
-              contains("'compute': (Map<String, dynamic> args) async"),
+              contains("'compute': (JsonObject args) async"),
               contains("return compute("),
-              contains("args['x'] as int"),
+              contains("ToolRegistry.getRequiredArg<int>(args, 'x')"),
               // Schemas map
-              contains("'compute': computeToolSchema"),
+              contains("'compute': computeOpenAiToolSchema"),
             ]),
           ),
         },
@@ -866,10 +1035,25 @@ void main() {
 /// the test's asset graph. This must match the public API of the
 /// `tool_schema_generator` package.
 const _annotationSource = '''
+enum SchemaFlavor {
+  openAi,
+  anthropic,
+  gemini,
+}
+
 class Tool {
   final String? name;
   final String? description;
-  const Tool({this.name, this.description});
+  final List<SchemaFlavor> flavors;
+  const Tool({
+    this.name,
+    this.description,
+    this.flavors = const [
+      SchemaFlavor.openAi,
+      SchemaFlavor.anthropic,
+      SchemaFlavor.gemini,
+    ],
+  });
 }
 
 class Describe {
