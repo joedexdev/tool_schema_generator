@@ -1,3 +1,50 @@
+## 1.0.0-dev0
+
+This release is a **pre-release milestone** that consolidates and formalises
+the package's public API ahead of a stable 1.0 launch. The surface area is now
+considered complete and frozen for the 1.x series; only additive changes and
+bug fixes are expected before 1.0.0.
+
+### Breaking
+
+* **`SchemaFlavor` renamed to `SchemaFormat`** — the old name implied informal
+  variation; the new name accurately describes what changes (the JSON envelope
+  format emitted for each provider).
+* **`@Tool(flavors: [...])` renamed to `@Tool(formats: [...])`** — matches the
+  `SchemaFormat` rename above.
+* **`ToolDefinition.flavors` renamed to `ToolDefinition.formats`** — same
+  alignment.
+* **`ToolRegistry.encodeAll(SchemaFlavor)` removed** — replaced by the unified
+  `encode({String? name, SchemaFormat format})` method (see below).
+* **`ToolRegistry.encode(String name, [SchemaFlavor])` removed** — merged into
+  the same unified `encode` method.
+
+### Added
+
+* **Unified `ToolRegistry.encode({String? name, SchemaFormat format})`** —
+  single method that covers all encoding use cases. Always returns
+  `List<JsonObject>` for a consistent return type regardless of call site.
+  Named parameters make intent explicit at the call site:
+  - `encode()` → all tools, OpenAI format
+  - `encode(format: SchemaFormat.gemini)` → all tools, Gemini format
+  - `encode(name: 'search')` → 1-element list, OpenAI format
+  - `encode(name: 'search', format: SchemaFormat.anthropic)` → 1-element list, Anthropic format
+* **`ToolRegistry.encoded` getter** — convenience alias for `encode()`,
+  returning all tools in OpenAI format. Retained for ergonomic one-liner use.
+
+### Internal
+
+* `ToolDefinition.encode([SchemaFormat])` (lowercase `format` parameter)
+  remains the per-definition internal encoding method, used by the registry's
+  `encode` implementation. It derives the provider envelope lazily at call time
+  from the single stored canonical representation — no pre-baked maps per
+  format.
+* The code generator now emits `formats:` and `SchemaFormat.*` in the
+  generated `tools.g.dart` files. Existing generated files must be regenerated
+  with `dart run build_runner build --delete-conflicting-outputs`.
+
+---
+
 ## 0.4.0
 
 ### Breaking
@@ -8,7 +55,7 @@
 ### Added
 
 * Added `SchemaFlavor` and `@Tool(flavors: [...])` for OpenAI, Anthropic, and Gemini provider-shaped schema generation.
-* Added `schemasFor(SchemaFlavor flavor)` and flavor-aware `schemaFor(name, flavor)` registry APIs.
+* Added `encodeAll(SchemaFlavor flavor)` and flavor-aware `encode(name, flavor)` registry APIs.
 * Added centralized argument validation helpers and strict enum validation.
 * Added generator validation for duplicate tool names.
 

@@ -39,11 +39,9 @@ void main() {
               contains("'name': 'doNothing'"),
               contains("A simple tool with no parameters."),
               contains("'type': 'object'"),
-              contains("const allToolSchemas"),
-              contains("doNothingToolSchema"),
               // Dispatcher — subclass
               contains("final class _ToolRegistry extends ToolRegistry"),
-              contains("get doNothing => schemaFor('doNothing')"),
+              contains("ToolDefinition get doNothing => this['doNothing']!;"),
               contains("final toolRegistry = _ToolRegistry("),
             ]),
           ),
@@ -671,7 +669,7 @@ void main() {
     // ------------------------------------------------------------------
     // Multiple @Tool functions → allToolSchemas
     // ------------------------------------------------------------------
-    test('generates allToolSchemas aggregate for multiple tools', () async {
+    test('generates multiple tools in toolRegistry', () async {
       await testBuilder(
         _makeBuilder(),
         {
@@ -698,24 +696,17 @@ void main() {
               contains("const alphaToolSchema"),
               contains("const betaToolSchema"),
               contains("const gammaToolSchema"),
-              contains("const allToolSchemas"),
-              contains("alphaOpenAiToolSchema,"),
-              contains("betaOpenAiToolSchema,"),
-              contains("gammaOpenAiToolSchema,"),
-              contains("SchemaFlavor.openAi: <String, JsonObject>"),
-              contains("SchemaFlavor.anthropic: <String, JsonObject>"),
-              contains("SchemaFlavor.gemini: <String, JsonObject>"),
               // Each tool gets a named getter on the subclass
-              contains("get alpha => schemaFor('alpha')"),
-              contains("get beta => schemaFor('beta')"),
-              contains("get gamma => schemaFor('gamma')"),
+              contains("ToolDefinition get alpha => this['alpha']!;"),
+              contains("ToolDefinition get beta => this['beta']!;"),
+              contains("ToolDefinition get gamma => this['gamma']!;"),
             ]),
           ),
         },
       );
     });
 
-    test('generates only selected schema flavors', () async {
+    test('generates only selected schema formats', () async {
       await testBuilder(
         _makeBuilder(),
         {
@@ -725,7 +716,7 @@ void main() {
             import 'package:tool_schema_generator/tool_schema_generator.dart';
             part 'test.g.dart';
 
-            @Tool(flavors: [SchemaFlavor.anthropic])
+            @Tool(formats: [SchemaFormat.anthropic])
             void claudeOnly(String query) {}
           ''',
         },
@@ -733,24 +724,15 @@ void main() {
         outputs: {
           '_test|lib/test.tool_schema.g.part': decodedMatches(
             allOf([
-              contains('const claudeOnlyAnthropicToolSchema'),
-              contains("'input_schema': <String, Object?>"),
-              isNot(contains('const claudeOnlyOpenAiToolSchema')),
-              isNot(contains('const claudeOnlyGeminiToolSchema')),
-              isNot(contains('const claudeOnlyToolSchema')),
-              contains('const allToolSchemas = <JsonObject>[];'),
-              isNot(contains("get claudeOnly => schemaFor('claudeOnly')")),
-              contains("SchemaFlavor.openAi: <String, JsonObject>{}"),
-              contains("SchemaFlavor.anthropic: <String, JsonObject>"),
-              contains("'claudeOnly': claudeOnlyAnthropicToolSchema"),
-              contains("SchemaFlavor.gemini: <String, JsonObject>{}"),
+              contains('formats: const [SchemaFormat.anthropic]'),
+              contains("ToolDefinition get claudeOnly => this['claudeOnly']!;"),
             ]),
           ),
         },
       );
     });
 
-    test('deduplicates repeated schema flavors', () async {
+    test('deduplicates repeated schema formats', () async {
       await testBuilder(
         _makeBuilder(),
         {
@@ -760,26 +742,23 @@ void main() {
             import 'package:tool_schema_generator/tool_schema_generator.dart';
             part 'test.g.dart';
 
-            @Tool(flavors: [SchemaFlavor.openAi, SchemaFlavor.openAi])
+            @Tool(formats: [SchemaFormat.openAi, SchemaFormat.openAi])
             void search(String query) {}
           ''',
         },
         generateFor: {'_test|lib/test.dart'},
         outputs: {
           '_test|lib/test.tool_schema.g.part': decodedMatches(
-            allOf([
-              contains('const searchOpenAiToolSchema'),
-              isNot(contains('const searchAnthropicToolSchema')),
-              isNot(contains('const searchGeminiToolSchema')),
-            ]),
+            allOf([contains('formats: const [SchemaFormat.openAi]')]),
           ),
         },
       );
     });
 
-    test('respects an explicit empty schema flavors list', () async {
+    test('respects an explicit empty schema formats list', () async {
       await testBuilder(
         _makeBuilder(),
+
         {
           'tool_schema_generator|lib/tool_schema_generator.dart':
               _annotationSource,
@@ -787,7 +766,7 @@ void main() {
             import 'package:tool_schema_generator/tool_schema_generator.dart';
             part 'test.g.dart';
 
-            @Tool(flavors: [])
+            @Tool(formats: [])
             void dispatchOnly(String query) {}
           ''',
         },
@@ -795,16 +774,8 @@ void main() {
         outputs: {
           '_test|lib/test.tool_schema.g.part': decodedMatches(
             allOf([
-              isNot(contains('dispatchOnlyOpenAiToolSchema')),
-              isNot(contains('dispatchOnlyAnthropicToolSchema')),
-              isNot(contains('dispatchOnlyGeminiToolSchema')),
-              isNot(contains('dispatchOnlyToolSchema')),
-              isNot(contains("get dispatchOnly => schemaFor('dispatchOnly')")),
-              contains('const allToolSchemas = <JsonObject>[];'),
-              contains("'dispatchOnly': (JsonObject args) async"),
-              contains("SchemaFlavor.openAi: <String, JsonObject>{}"),
-              contains("SchemaFlavor.anthropic: <String, JsonObject>{}"),
-              contains("SchemaFlavor.gemini: <String, JsonObject>{}"),
+              contains('formats: const []'),
+              contains("handler: (JsonObject args) async"),
             ]),
           ),
         },
@@ -837,11 +808,9 @@ void main() {
                 // Schema key is the overridden tool name
                 contains("'name': 'custom_name'"),
                 // Getter uses the Dart function name
-                contains("get myTool => schemaFor('custom_name')"),
+                contains("ToolDefinition get myTool => this['custom_name']!;"),
                 // Handlers map uses the overridden name
-                contains("'custom_name': (JsonObject args)"),
-                // Schemas map also uses overridden name
-                contains("'custom_name': myToolOpenAiToolSchema"),
+                contains("name: 'custom_name'"),
               ]),
             ),
           },
@@ -874,15 +843,13 @@ void main() {
               // Subclass exists
               contains("final class _ToolRegistry extends ToolRegistry"),
               // Named getter on subclass
-              contains("get compute => schemaFor('compute')"),
+              contains("ToolDefinition get compute => this['compute']!;"),
               // Registry constructed with _ToolRegistry
               contains("final toolRegistry = _ToolRegistry("),
               // Handlers map
-              contains("'compute': (JsonObject args) async"),
+              contains("handler: (JsonObject args) async"),
               contains("return compute("),
               contains("ToolRegistry.getRequiredArg<int>(args, 'x')"),
-              // Schemas map
-              contains("'compute': computeOpenAiToolSchema"),
             ]),
           ),
         },
@@ -1035,7 +1002,7 @@ void main() {
 /// the test's asset graph. This must match the public API of the
 /// `tool_schema_generator` package.
 const _annotationSource = '''
-enum SchemaFlavor {
+enum SchemaFormat {
   openAi,
   anthropic,
   gemini,
@@ -1044,14 +1011,14 @@ enum SchemaFlavor {
 class Tool {
   final String? name;
   final String? description;
-  final List<SchemaFlavor> flavors;
+  final List<SchemaFormat> formats;
   const Tool({
     this.name,
     this.description,
-    this.flavors = const [
-      SchemaFlavor.openAi,
-      SchemaFlavor.anthropic,
-      SchemaFlavor.gemini,
+    this.formats = const [
+      SchemaFormat.openAi,
+      SchemaFormat.anthropic,
+      SchemaFormat.gemini,
     ],
   });
 }

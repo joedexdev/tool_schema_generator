@@ -1,213 +1,427 @@
 # tool_schema_generator
 
-A code generator for Dart that automatically produces provider-compatible tool schemas for Large Language Models (LLMs) from your annotated Dart functions.
+A Dart code generator that automatically produces provider-compatible tool schemas for Large Language Models from annotated Dart functions — with a unified runtime registry for dispatch, validation, and multi-provider encoding.
 
 [![pub package](https://img.shields.io/pub/v/tool_schema_generator.svg)](https://pub.dev/packages/tool_schema_generator)
 
-If you are building AI agents with Gemini, OpenAI, Claude, or other LLMs, you often need to provide a schema describing the tools (functions) the model can call. Instead of writing and maintaining provider-specific JSON maps by hand, `tool_schema_generator` lets you write standard Dart functions and automatically generates the precise schemas your LLM needs.
+---
+
+## Why
+
+When building LLM agents, every provider (OpenAI, Anthropic, Gemini) expects a different JSON envelope to describe callable tools. Writing and maintaining these maps by hand — across multiple providers — is tedious and error-prone.
+
+`tool_schema_generator` solves this with a simple model:
+
+1. **Annotate** your Dart functions with `@Tool()`.
+2. **Generate** — `build_runner` produces a `toolRegistry` with provider-shaped schemas and a validated dispatcher.
+3. **Use** — pass `toolRegistry.encode()` to your LLM and call `toolRegistry.call(name, args)` when it responds.
+
+No hand-written JSON. No duplicated schemas. One source of truth.
 
 ---
 
-## 🌟 Features
+## Features
 
-- **Zero Boilerplate:** Automatically infers types, names, and nullability directly from Dart syntax.
-- **Full Analyzer Support:** Supports `String`, `int`, `double`, `bool`, `List<T>`, `Map<String, Object?>`, `enum`s, and custom nested classes.
-- **Provider-Shaped Schemas:** Generates OpenAI, Anthropic, and Gemini tool schema shapes from the same Dart functions.
-- **Seamless Integration:** Uses the canonical `source_gen` combining builder. It outputs to a standard `.g.dart` file and plays nicely alongside other generators like `json_serializable`.
-- **Customizable:** Override tool names and descriptions, or let it automatically extract descriptions from your Dart doc comments.
-- **Runtime Injection:** Hide app-controlled parameters from the LLM schema with `@Inject()` while still passing them during dispatch.
+- **Zero boilerplate** — names, types, nullability, and doc comments are all inferred from Dart syntax.
+- **Multi-provider encoding** — one annotation, three provider shapes: OpenAI, Anthropic, and Gemini.
+- **Unified encode API** — `encode()` always returns `List<JsonObject>`, making spreads, LLM calls, and per-tool access consistent.
+- **Type-safe dispatch** — the generated registry validates every argument and routes calls to the right Dart closure.
+- **Raw JSON as a first-class citizen** — hand-written `Map<String, Object?>` schemas can be passed directly to `ToolRegistry`; no wrapper required.
+- **Runtime composition** — registries can be extended at runtime with `extend()`, mixing generated and ad-hoc tools.
+- **Runtime injection** — hide session parameters (user IDs, locale, etc.) from the LLM schema with `@Inject()`.
+- **Full type support** — `String`, `int`, `double`, `bool`, `List<T>`, `Map<String, Object?>`, `enum`s, and custom nested classes.
+- **`source_gen` compatible** — plays nicely alongside `json_serializable` and other generators.
 
-## 📦 Installation
+---
 
-Add the package to your `pubspec.yaml`:
+## Installation
 
 ```yaml
 dependencies:
-  tool_schema_generator: ^0.4.0
+  tool_schema_generator: ^1.0.0-dev0
 
 dev_dependencies:
   build_runner: ^2.4.0
 ```
 
-## 🚀 Quick Start
+---
+
+## Quick Start
 
 ### 1. Annotate your functions
-
-Create a `.dart` file and use the `@Tool()` annotation on your top-level functions. You can use the `@Describe()` annotation to add rich descriptions to individual parameters.
 
 ```dart
 // lib/tools.dart
 import 'package:tool_schema_generator/tool_schema_generator.dart';
 
-// IMPORTANT: Declare the part file
 part 'tools.g.dart';
 
-/// Sends an email to a specific user.
+/// Sends an email to a specific recipient.
 @Tool()
-void sendEmail(
-  @Describe('The email address of the recipient') String to,
-  @Describe('The subject line of the email') String subject, {
-  @Describe('The main body content') required String body,
+Future<void> sendEmail(
+  @Describe('Recipient email address') String to,
+  @Describe('Subject line') String subject, {
+  @Describe('Body content') required String body,
   bool isHtml = false,
-}) {
-  // Your logic here
+}) async {
+  // your implementation
 }
 ```
 
 ### 2. Run the generator
 
-Run the build runner command in your terminal:
-
 ```bash
 dart run build_runner build
 ```
 
-### 3. Use the generated schemas and dispatcher
-
-The generator creates a `tools.g.dart` file containing a `toolRegistry` instance. This registry contains all your schemas and automatically routes LLM tool calls back to your Dart functions safely.
-
-You can pass provider-shaped schemas directly to your LLM framework using `toolRegistry.schemasFor(...)`, or select individual OpenAI-compatible schemas via strongly-typed getters like `toolRegistry.sendEmail`.
-
-- `toolRegistry.schemasFor(SchemaFlavor.openAi)` gives you OpenAI function tool schemas.
-- `toolRegistry.schemasFor(SchemaFlavor.anthropic)` gives you Anthropic tool schemas using `input_schema`.
-- `toolRegistry.schemasFor(SchemaFlavor.gemini)` gives you Gemini function declarations.
-- `toolRegistry.allSchemas` remains an OpenAI-compatible alias.
-- `toolRegistry.sendEmail` gives you a single OpenAI-compatible `JsonObject` just for that tool.
-
-Then dispatch when the LLM replies:
-
-```dart
-final value = await toolRegistry.call(
-  toolCall.name,
-  toolCall.arguments
-);
-```
-
-The registry takes the raw string name and raw `JsonObject` (`Map<String, Object?>`) arguments from the LLM, finds the right Dart closure, validates all arguments, calls your function, and awaits the raw result.
-
-Argument and execution failures are surfaced as typed exceptions:
-
-- `ToolNotFoundException`
-- `MissingToolArgumentException`
-- `InvalidToolArgumentException`
-- `ToolExecutionException`
-
-This gives you a completely type-safe, boilerplate-free bridge between Dart code and LLM agent loops.
+### 3. Use the generated registry
 
 ```dart
 import 'tools.dart';
 
-void main() async {
-  // 1. Pass the schemas to your LLM
-  final response = await llm.generate(
-    prompt: "Send an email to hello@example.com saying Hi!",
-    tools: toolRegistry.schemasFor(SchemaFlavor.openAi),
-  );
+// ── Encode schemas for your LLM ─────────────────────────────────────────────
+final response = await llm.generate(
+  prompt: 'Send an email to hello@example.com saying Hi!',
+  tools: toolRegistry.encode(),                              // OpenAI (default)
+  // tools: toolRegistry.encode(format: SchemaFormat.gemini) // Gemini
+  // tools: toolRegistry.encode(format: SchemaFormat.anthropic) // Anthropic
+);
 
-  // 2. When the LLM decides to call a tool, dispatch it.
-  for (final toolCall in response.toolCalls) {
-    try {
-      final value = await toolRegistry.call(
-        toolCall.name,
-        toolCall.arguments,
-      );
-      print("Tool returned: $value");
-    } on ToolCallException catch (error) {
-      print("Tool failed: ${error.message}");
-    }
-  }
+// ── Dispatch the model's tool call ──────────────────────────────────────────
+for (final call in response.toolCalls) {
+  final value = await toolRegistry.call(call.name, call.arguments);
+  print('Tool returned: $value');
 }
 ```
 
-## 🧠 Advanced Usage
+---
+
+## Core API
+
+### `toolRegistry.encode({String? name, SchemaFormat format})`
+
+The unified encoding method. Always returns `List<JsonObject>`.
+
+| Call | Returns |
+|---|---|
+| `encode()` | All tools, OpenAI format |
+| `encode(format: SchemaFormat.gemini)` | All tools, Gemini format |
+| `encode(format: SchemaFormat.anthropic)` | All tools, Anthropic format |
+| `encode(name: 'search')` | 1-element list, that tool, OpenAI format |
+| `encode(name: 'search', format: SchemaFormat.anthropic)` | 1-element list, that tool, Anthropic format |
+
+Because the return type is always `List<JsonObject>`, you can spread with extra tools, pass directly to any LLM client, or concatenate registries:
+
+```dart
+// Spread a hand-crafted tool alongside generated ones
+final tools = [
+  ...toolRegistry.encode(format: SchemaFormat.openAi),
+  thinkTool, // a raw JsonObject
+];
+
+// Single tool by name
+final justSearch = toolRegistry.encode(name: 'search').first;
+```
+
+### `toolRegistry.encoded`
+
+A convenience getter equivalent to `encode()` — all tools, OpenAI format.
+
+### Named getters
+
+The generated subclass exposes a strongly-typed getter per tool, returning a `ToolDefinition` (which is itself a `Map<String, Object?>`):
+
+```dart
+// Equivalent to toolRegistry.encode(name: 'sendEmail').first
+final schema = toolRegistry.sendEmail; // ToolDefinition (OpenAI shape)
+```
+
+### `toolRegistry.call(name, args)`
+
+Dispatches a tool call. Validates all arguments, calls the Dart function, and returns the raw result.
+
+```dart
+final value = await toolRegistry.call(call.name, call.arguments);
+```
+
+Throws typed exceptions on failure (see [Error Handling](#error-handling)).
+
+### `toolRegistry.callOrNull(name, args)`
+
+Like `call`, but returns `null` instead of throwing when the name is not registered. Useful in multi-registry fan-out patterns.
+
+### `toolRegistry.extend(tools)`
+
+Returns a new `ToolRegistry` that merges the current tools with `additionalTools`. On name collision, the later entry wins.
+
+```dart
+// Mix generated tools with a raw JSON schema at runtime
+final extendedRegistry = toolRegistry.extend([
+  {'type': 'function', 'function': {'name': 'thinkTool', 'parameters': {...}}},
+]);
+
+// Compose two generated registries
+final combined = registryA.extend(registryB);
+```
+
+---
+
+## Annotations
+
+### `@Tool()`
+
+Marks a top-level function as an LLM-callable tool.
+
+```dart
+@Tool(
+  name: 'custom_name',          // optional — defaults to Dart function name
+  description: 'Override ...',  // optional — defaults to doc comment
+  formats: [                    // optional — defaults to all three
+    SchemaFormat.openAi,
+    SchemaFormat.anthropic,
+    SchemaFormat.gemini,
+  ],
+)
+```
+
+### `@Describe('...')`
+
+Adds a description to a parameter. Without it, the parameter still appears in the schema but has no `"description"` field.
+
+```dart
+@Tool()
+void search(
+  @Describe('The search query string') String query,
+  @Describe('Max number of results, 1–50') int limit,
+) {}
+```
+
+### `@Inject()`
+
+Hides a named parameter from the schema sent to the LLM. The value is still available to the handler via the `args` map, so you can inject session context at call time.
+
+```dart
+@Tool()
+Future<void> createTask(
+  @Describe('Task title') String title, {
+  @Inject() String? userId,    // hidden from schema, merged before dispatch
+  @Inject() String locale = 'en',
+}) async { ... }
+
+// Dispatch — merge runtime context before calling
+await toolRegistry.call(call.name, {
+  ...call.arguments,
+  'userId': session.userId,
+  'locale': request.locale,
+});
+```
+
+Rules for `@Inject()`:
+- Only on **named** parameters.
+- Must be **optional** — nullable or have a Dart default value.
+- Cannot be `required`.
+
+---
+
+## Multi-Provider Encoding
+
+### Provider schema shapes
+
+`SchemaFormat` controls which envelope is emitted:
+
+| `SchemaFormat` | Envelope shape |
+|---|---|
+| `openAi` (default) | `{"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}` |
+| `anthropic` | `{"name": ..., "description": ..., "input_schema": ...}` |
+| `gemini` | `{"name": ..., "description": ..., "parameters": ...}` |
+
+All three share the same provider-agnostic JSON Schema for the parameters — only the outer envelope changes.
+
+### Restricting a tool to specific providers
+
+```dart
+// This tool only appears when encoding for Anthropic
+@Tool(formats: [SchemaFormat.anthropic])
+Future<String> claudeOnlySearch(String query) async => '...';
+
+// When you call encode(format: SchemaFormat.openAi), this tool is excluded
+toolRegistry.encode(format: SchemaFormat.openAi); // does not include claudeOnlySearch
+toolRegistry.encode(format: SchemaFormat.anthropic); // includes it
+```
+
+---
+
+## Type Support
+
+The generator maps Dart types to JSON Schema types:
+
+| Dart type | JSON Schema |
+|---|---|
+| `String` | `{"type": "string"}` |
+| `int` | `{"type": "integer"}` |
+| `double` | `{"type": "number"}` |
+| `bool` | `{"type": "boolean"}` |
+| `List<T>` | `{"type": "array", "items": <schema for T>}` |
+| `Map<String, Object?>` | `{"type": "object"}` |
+| `T?` (nullable) | adds `"nullable": true` to the schema |
+| `enum Foo { a, b }` | `{"type": "string", "enum": ["a", "b"]}` |
+| Custom class `Foo` | `{"type": "object", "properties": {...}, "required": [...]}` |
 
 ### Enums
-
-Enums are automatically converted to JSON Schema string enums:
 
 ```dart
 enum Priority { low, normal, high }
 
 @Tool()
 void setTaskPriority(Priority priority) {}
-// Generates: {"type": "string", "enum": ["low", "normal", "high"]}
+// → {"type": "string", "enum": ["low", "normal", "high"]}
 ```
 
-### Nested Objects
+The generated dispatcher also emits a `_parseEnum<T>` helper that validates
+the raw string and throws `InvalidToolArgumentException` on unknown values.
 
-Custom classes are introspected. The generator looks at the class's constructor parameters to build a nested JSON Schema object:
+### Nested objects
+
+The generator inspects the class's primary constructor to build the nested schema. Required constructor parameters become JSON Schema `required` entries.
 
 ```dart
-class Location {
-  final double lat;
-  final double lng;
-  Location({required this.lat, required this.lng});
+class GeoLocation {
+  final double latitude;
+  final double longitude;
+  GeoLocation({required this.latitude, required this.longitude});
 }
 
 @Tool()
-void updateLocation(Location location) {}
-// Generates nested object with properties `lat` and `lng` (both required).
+void findNearbyPlaces(
+  @Describe('The center point') GeoLocation location,
+  double radiusKm,
+) {}
+// → {"type": "object", "properties": {"latitude": ..., "longitude": ...}, "required": ["latitude", "longitude"]}
 ```
 
-### Overriding Names and Descriptions
+---
 
-If you don't want to use the Dart function name or doc comment, you can override them directly in the annotation:
+## Error Handling
 
-```dart
-@Tool(
-  name: 'custom_search_tool',
-  description: 'A highly specific search tool description.'
-)
-void search(String query) {}
-```
+All dispatch errors are subtypes of `ToolCallException`:
 
-### Provider Flavors
-
-By default, every tool is generated for OpenAI, Anthropic, and Gemini. You can limit a tool to specific provider shapes:
+| Exception | When |
+|---|---|
+| `ToolNotFoundException` | No tool registered under that name |
+| `MissingToolArgumentException` | A required argument was absent from the args map |
+| `InvalidToolArgumentException` | Wrong type, wrong enum value, or list item type mismatch |
+| `ToolExecutionException` | The tool function itself threw an unhandled exception |
 
 ```dart
-@Tool(flavors: [SchemaFlavor.anthropic])
-Future<String> searchClaudeOnly(String query) async => '...';
-```
-
-The generated registry groups schemas by flavor:
-
-```dart
-final anthropicTools = toolRegistry.schemasFor(SchemaFlavor.anthropic);
-final openAiSendEmail = toolRegistry.sendEmail;
-```
-
-### Injected Runtime Parameters
-
-Use `@Inject()` for app-controlled named parameters that should not appear in
-the schema sent to the LLM. Injected parameters are still read from the same
-arguments map passed to `toolRegistry.call`, so you can merge values like user
-IDs, tenant IDs, or request locale at invocation time.
-
-Injected parameters must be optional: nullable, have a Dart default value, or
-both.
-
-```dart
-@Tool()
-Future<void> createTask(
-  @Describe('Task title') String title, {
-  @Inject() String? userId,
-  @Inject() String locale = 'en',
-}) async {
-  // userId and locale are available here, but only title is in the schema.
+try {
+  final value = await toolRegistry.call(call.name, call.arguments);
+  sendToModel(value.toString());
+} on ToolNotFoundException catch (e) {
+  print('Unknown tool: ${e.name}. Available: ${e.available}');
+} on MissingToolArgumentException catch (e) {
+  print('Missing field: ${e.field}');
+} on InvalidToolArgumentException catch (e) {
+  print('Bad value for ${e.field}: expected ${e.expected}, got ${e.actual}');
+} on ToolExecutionException catch (e) {
+  print('Tool crashed: ${e.error}');
 }
-
-final value = await toolRegistry.call(toolCall.name, {
-  ...toolCall.arguments,
-  'userId': currentUser.id,
-  'locale': request.locale,
-});
 ```
 
-## 🤝 Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Raw JSON as First-Class Input
 
-## 📄 License
+`ToolRegistry` accepts raw `Map<String, Object?>` schemas directly — no wrapper needed. This is the primary path for integrating with external tool-calling standards (MCP, custom adapters, etc.).
 
-This project is licensed under the MIT License.
+```dart
+// Both ToolDefinitions and raw maps are accepted
+final registry = ToolRegistry([
+  ...toolRegistry,                  // spread from generated registry
+  {'type': 'function', 'function': {'name': 'thinkTool', 'parameters': {...}}},
+]);
+
+// extend() also accepts raw maps
+final extended = toolRegistry.extend([rawToolSchema]);
+```
+
+`ToolDefinition.raw()` normalises both envelope shapes:
+- `{"type": "function", "function": {...}}` (OpenAI-style) — used as-is.
+- `{"name": ..., "parameters": ...}` (flat, Gemini/Anthropic-style) — wrapped automatically.
+
+---
+
+## Architecture & Internals
+
+### `ToolDefinition` extends `MapView`
+
+A `ToolDefinition` **is** an OpenAI-compatible `Map<String, Object?>`. It stores one canonical representation internally (the OpenAI `{"type": "function", ...}` envelope) and derives the other provider shapes on demand in `encode(SchemaFormat)`:
+
+```
+ToolDefinition
+ ├── name, description, parametersSchema  ← single source of truth
+ ├── formats                              ← which providers support this tool
+ ├── handler                              ← the Dart closure
+ └── encode(SchemaFormat) →
+      openAi     → Map.unmodifiable(this)          // re-uses the stored map
+      anthropic  → {"name", "description", "input_schema": parametersSchema}
+      gemini     → {"name", "description", "parameters": parametersSchema}
+```
+
+No pre-baked map per format. Provider shapes are derived lazily at encode time.
+
+### `ToolRegistry` extends `IterableBase<JsonObject>`
+
+The registry's backing store is a single `Map<String, ToolDefinition>`. Because `ToolRegistry` extends `IterableBase`, its `iterator` yields `ToolDefinition` values directly — meaning `for (final tool in toolRegistry)` and spreading `[...toolRegistry]` both iterate the OpenAI-shaped maps (since `ToolDefinition extends MapView`).
+
+```
+ToolRegistry
+ ├── _tools: Map<String, ToolDefinition>
+ ├── iterator → _tools.values.iterator  (each value IS a JsonObject)
+ ├── encode({name?, format}) → List<JsonObject>   ← unified API
+ ├── call(name, args) → Future<Object?>
+ ├── extend(tools) → new ToolRegistry
+ └── static getRequiredArg / getOptionalArg / ...  ← shared argument helpers
+```
+
+### What the generator emits
+
+For each `@Tool`-annotated function, `build_runner` produces three things:
+
+1. **`const <functionName>ParametersSchema`** — a `Map<String, Object?>` of the JSON Schema.
+2. **`const <functionName>ToolSchema`** — the full OpenAI envelope wrapping the parameters schema.
+3. A `ToolDefinition(...)` entry inside the `toolRegistry` initialiser, including the `formats` list and a typed `handler` closure.
+
+The handler closure uses the static helpers on `ToolRegistry` for validation:
+
+```dart
+handler: (JsonObject args) async {
+  return getWeather(
+    ToolRegistry.getRequiredArg<String>(args, 'city'),
+    unit: _parseEnum(
+      TemperatureUnit.values,
+      ToolRegistry.getOptionalArg<String>(args, 'unit'),
+      'unit',
+    ) ?? TemperatureUnit.celsius,
+  );
+},
+```
+
+The generated subclass of `ToolRegistry` adds one named getter per tool:
+
+```dart
+final class _ToolRegistry extends ToolRegistry {
+  _ToolRegistry(super.tools);
+  ToolDefinition get getWeather => this['getWeather']!;
+  ToolDefinition get sendEmail  => this['sendEmail']!;
+}
+```
+
+---
+
+## Contributing
+
+Contributions are welcome — please open a PR with a clear description of the problem and the change.
+
+## License
+
+MIT
