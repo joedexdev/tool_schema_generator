@@ -1,6 +1,7 @@
 import 'package:build_test/build_test.dart';
 import 'package:test/test.dart';
 
+import 'package:tool_schema_generator/src/schema_spec.dart';
 import 'package:tool_schema_generator/src/type_mapper.dart';
 
 void main() {
@@ -129,7 +130,7 @@ void main() {
 /// then maps the first parameter's type using [TypeMapper].
 Future<String> _resolveAndMapType(String paramDeclaration) async {
   final mapper = TypeMapper();
-  late String result;
+  late SchemaSpec result;
 
   await resolveSource(
     '''
@@ -144,13 +145,13 @@ Future<String> _resolveAndMapType(String paramDeclaration) async {
     inputId: makeAssetId('_test|lib/test.dart'),
   );
 
-  return result;
+  return result.toDartSource();
 }
 
 /// Helper: resolves a return type and maps it.
 Future<String> _resolveAndMapReturnType(String returnType) async {
   final mapper = TypeMapper();
-  late String result;
+  late SchemaSpec result;
 
   await resolveSource(
     '''
@@ -165,13 +166,13 @@ Future<String> _resolveAndMapReturnType(String returnType) async {
     inputId: makeAssetId('_test|lib/test.dart'),
   );
 
-  return result;
+  return result.toDartSource();
 }
 
 /// Helper: resolves an enum type and maps it.
 Future<String> _resolveAndMapEnum() async {
   final mapper = TypeMapper();
-  late String result;
+  late SchemaSpec result;
 
   await resolveSource(
     '''
@@ -187,13 +188,13 @@ Future<String> _resolveAndMapEnum() async {
     inputId: makeAssetId('_test|lib/test.dart'),
   );
 
-  return result;
+  return result.toDartSource();
 }
 
 /// Helper: resolves a class type with required constructor params.
 Future<String> _resolveAndMapClass() async {
   final mapper = TypeMapper();
-  late String result;
+  late SchemaSpec result;
 
   await resolveSource(
     '''
@@ -213,13 +214,13 @@ Future<String> _resolveAndMapClass() async {
     inputId: makeAssetId('_test|lib/test.dart'),
   );
 
-  return result;
+  return result.toDartSource();
 }
 
 /// Helper: resolves a class with required-only constructor params.
 Future<String> _resolveAndMapClassWithRequiredOnly() async {
   final mapper = TypeMapper();
-  late String result;
+  late SchemaSpec result;
 
   await resolveSource(
     '''
@@ -238,5 +239,5 @@ Future<String> _resolveAndMapClassWithRequiredOnly() async {
     inputId: makeAssetId('_test|lib/test.dart'),
   );
 
-  return result;
+  return result.toDartSource();
 }

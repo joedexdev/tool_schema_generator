@@ -2,16 +2,15 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 
+import 'schema_spec.dart';
+
 /// Maps Dart types to provider-compatible JSON object schema representations.
-///
-/// Returns a Dart source string that represents a JSON object map literal
-/// suitable for embedding in generated code.
 class TypeMapper {
   /// Set of class types already being processed, used to prevent infinite
   /// recursion when a class references itself.
   final Set<String> _processingStack = {};
 
-  /// Converts a [DartType] to a JSON object schema map literal string.
+  /// Converts a [DartType] to an internal JSON Schema representation.
   ///
   /// Handles:
   /// - Primitive types (`String`, `int`, `double`, `num`, `bool`)
@@ -20,28 +19,20 @@ class TypeMapper {
   /// - Enum types → `{"type": "string", "enum": [...]}`
   /// - Custom classes → recursive `{"type": "object", "properties": {...}}`
   /// - Nullable types → adds `"nullable": true`
-  String mapType(DartType type) {
+  SchemaSpec mapType(DartType type) {
     final isNullable = type.nullabilitySuffix == NullabilitySuffix.question;
     final coreSchema = _mapCoreType(type);
 
-    if (isNullable && !coreSchema.contains("'nullable': true")) {
-      // Insert nullable flag into the schema map
-      return coreSchema.replaceFirst(
-        '<String, Object?>{',
-        "<String, Object?>{'nullable': true, ",
-      );
-    }
-
-    return coreSchema;
+    return isNullable ? coreSchema.copyWith(isNullable: true) : coreSchema;
   }
 
-  String _mapCoreType(DartType type) {
+  SchemaSpec _mapCoreType(DartType type) {
     // Unwrap nullable for matching
     final element = type.element;
 
     // Check for void / dynamic
     if (type is VoidType || type is DynamicType) {
-      return "<String, Object?>{'type': 'string'}";
+      return const StringSchemaSpec();
     }
 
     // Check primitive types by name
@@ -52,15 +43,15 @@ class TypeMapper {
 
     switch (baseTypeName) {
       case 'String':
-        return "<String, Object?>{'type': 'string'}";
+        return const StringSchemaSpec();
       case 'int':
-        return "<String, Object?>{'type': 'integer'}";
+        return const IntegerSchemaSpec();
       case 'double':
-        return "<String, Object?>{'type': 'number'}";
+        return const NumberSchemaSpec();
       case 'num':
-        return "<String, Object?>{'type': 'number'}";
+        return const NumberSchemaSpec();
       case 'bool':
-        return "<String, Object?>{'type': 'boolean'}";
+        return const BooleanSchemaSpec();
     }
 
     // Check for List<T>
@@ -68,23 +59,24 @@ class TypeMapper {
       final typeArgs = type.typeArguments;
       if (typeArgs.isNotEmpty) {
         final itemsSchema = mapType(typeArgs.first);
-        return "<String, Object?>{'type': 'array', 'items': $itemsSchema}";
+        return ArraySchemaSpec(items: itemsSchema);
       }
-      return "<String, Object?>{'type': 'array'}";
+      return const ArraySchemaSpec(items: null);
     }
 
     // Check for Map<String, T>
     if (type.isDartCoreMap) {
-      return "<String, Object?>{'type': 'object'}";
+      return const ObjectSchemaSpec();
     }
 
     // Check for enum types
     if (element is EnumElement) {
       final enumValues = element.fields
           .where((field) => field.isEnumConstant)
-          .map((field) => "'${field.name}'")
-          .join(', ');
-      return "<String, Object?>{'type': 'string', 'enum': <String>[$enumValues]}";
+          .map((field) => field.name)
+          .nonNulls
+          .toList();
+      return EnumSchemaSpec(values: enumValues);
     }
 
     // Check for custom class types (nested objects)
@@ -93,17 +85,19 @@ class TypeMapper {
     }
 
     // Fallback
-    return "<String, Object?>{'type': 'string'}";
+    return const StringSchemaSpec();
   }
 
   /// Maps a [ClassElement] to a JSON Schema "object" type with properties
   /// derived from the class's constructor parameters.
-  String _mapClassType(ClassElement classElement) {
+  ObjectSchemaSpec _mapClassType(ClassElement classElement) {
     final className = classElement.name;
 
     // Prevent infinite recursion for self-referencing types
     if (className == null || _processingStack.contains(className)) {
-      return "<String, Object?>{'type': 'object', 'description': '${className ?? 'unknown'} (circular reference)'}";
+      return ObjectSchemaSpec(
+        description: '${className ?? 'unknown'} (circular reference)',
+      );
     }
 
     _processingStack.add(className);
@@ -115,33 +109,24 @@ class TypeMapper {
           classElement.constructors.firstOrNull;
 
       if (constructor == null) {
-        return "<String, Object?>{'type': 'object'}";
+        return const ObjectSchemaSpec();
       }
 
-      final propertiesBuffer = StringBuffer();
+      final properties = <String, SchemaSpec>{};
       final requiredParams = <String>[];
-      var isFirstProperty = true;
 
       for (final param in constructor.formalParameters) {
-        if (!isFirstProperty) {
-          propertiesBuffer.write(', ');
-        }
-        isFirstProperty = false;
-
         final paramName = param.name;
         final paramSchema = mapType(param.type);
-        propertiesBuffer.write("'$paramName': $paramSchema");
+        if (paramName == null) continue;
+        properties[paramName] = paramSchema;
 
         if (param.isRequired) {
-          requiredParams.add("'$paramName'");
+          requiredParams.add(paramName);
         }
       }
 
-      final requiredPart = requiredParams.isNotEmpty
-          ? ", 'required': <String>[${requiredParams.join(', ')}]"
-          : '';
-
-      return "<String, Object?>{'type': 'object', 'properties': <String, Object?>{$propertiesBuffer}$requiredPart}";
+      return ObjectSchemaSpec(properties: properties, required: requiredParams);
     } finally {
       _processingStack.remove(className);
     }

@@ -47,6 +47,12 @@ class Tool {
   /// By default, the generator emits all supported provider shapes.
   final List<SchemaFormat> formats;
 
+  /// Whether this tool should emit a strict parameter schema.
+  ///
+  /// Strict tools require every visible property and close object schemas with
+  /// `additionalProperties: false`.
+  final bool strict;
+
   /// Creates a [Tool] annotation.
   const Tool({
     this.name,
@@ -56,6 +62,7 @@ class Tool {
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
     ],
+    this.strict = false,
   });
 }
 

@@ -25,6 +25,7 @@ No hand-written JSON. No duplicated schemas. One source of truth.
 - **Zero boilerplate** — names, types, nullability, and doc comments are all inferred from Dart syntax.
 - **Multi-provider encoding** — one annotation, three provider shapes: OpenAI, Anthropic, and Gemini.
 - **Unified encode API** — `encode()` always returns `List<JsonObject>`, making spreads, LLM calls, and per-tool access consistent.
+- **Provider-agnostic strict mode** — opt into closed, fully-required schemas with `@Tool(strict: true)`.
 - **Type-safe dispatch** — the generated registry validates every argument and routes calls to the right Dart closure.
 - **Raw JSON as a first-class citizen** — hand-written `Map<String, Object?>` schemas can be passed directly to `ToolRegistry`; no wrapper required.
 - **Runtime composition** — registries can be extended at runtime with `extend()`, mixing generated and ad-hoc tools.
@@ -38,7 +39,7 @@ No hand-written JSON. No duplicated schemas. One source of truth.
 
 ```yaml
 dependencies:
-  tool_schema_generator: ^1.0.0-dev0
+  tool_schema_generator: ^1.0.0-dev1
 
 dev_dependencies:
   build_runner: ^2.4.0
@@ -176,6 +177,7 @@ Marks a top-level function as an LLM-callable tool.
 @Tool(
   name: 'custom_name',          // optional — defaults to Dart function name
   description: 'Override ...',  // optional — defaults to doc comment
+  strict: true,                 // optional — defaults to false
   formats: [                    // optional — defaults to all three
     SchemaFormat.openAi,
     SchemaFormat.anthropic,
@@ -183,6 +185,9 @@ Marks a top-level function as an LLM-callable tool.
   ],
 )
 ```
+
+`strict: true` is additive and opt-in. Existing `@Tool()` declarations keep
+their current non-strict behavior.
 
 ### `@Describe('...')`
 
@@ -223,6 +228,38 @@ Rules for `@Inject()`:
 
 ---
 
+## Strict Mode
+
+Strict mode is useful when you want the model to follow the tool schema as
+closely as the provider allows. Enable it per tool:
+
+```dart
+@Tool(strict: true)
+Future<void> createTask({
+  required String title,
+  String? notes,
+}) async {}
+```
+
+For strict tools, the generated parameter schema is transformed before it is
+emitted:
+
+- Every visible parameter is listed in `required`, including nullable and
+  defaulted parameters.
+- Every object schema, including nested custom classes, gets
+  `"additionalProperties": false`.
+- OpenAI and Anthropic envelopes include `"strict": true`.
+- Gemini receives the same strict-shaped parameter schema, without an extra
+  provider-specific strict flag.
+
+Strict mode intentionally rejects Dart types that cannot be represented as a
+closed JSON Schema during generation. This includes `dynamic`, `void`,
+free-form `Map<...>` parameters, raw lists without item types, recursive object
+graphs, and nested fields with those shapes. Use concrete typed classes when a
+tool needs strict behavior.
+
+---
+
 ## Multi-Provider Encoding
 
 ### Provider schema shapes
@@ -236,6 +273,9 @@ Rules for `@Inject()`:
 | `gemini` | `{"name": ..., "description": ..., "parameters": ...}` |
 
 All three share the same provider-agnostic JSON Schema for the parameters — only the outer envelope changes.
+
+When `@Tool(strict: true)` is used, OpenAI and Anthropic encodings also include
+their strict flag. The canonical parameter schema remains provider-neutral.
 
 ### Restricting a tool to specific providers
 
@@ -352,6 +392,31 @@ final extended = toolRegistry.extend([rawToolSchema]);
 
 ## Architecture & Internals
 
+The generator uses a small compiler-style pipeline:
+
+```
+Dart elements
+  -> ToolParser
+  -> ToolSpec / ParameterSpec / SchemaSpec
+  -> optional strict schema transform
+  -> Dart source emitter
+```
+
+This keeps Dart analysis, schema transformation, and source rendering separate.
+The public runtime API still centers on `ToolRegistry`, `ToolDefinition`, and
+the generated `toolRegistry`.
+
+### SchemaSpec intermediate representation
+
+`TypeMapper` maps Dart types into an internal `SchemaSpec` tree instead of
+building schema source strings directly. `ToolParser` then wraps those schema
+nodes into `ToolSpec` and `ParameterSpec` models. The emitter is the only layer
+that turns those specs into generated Dart source.
+
+That split matters because schema changes can now be tested and transformed as
+data. Strict mode, for example, recursively walks the `SchemaSpec` tree to close
+object schemas and expand `required` lists before code is emitted.
+
 ### `ToolDefinition` extends `MapView`
 
 A `ToolDefinition` **is** an OpenAI-compatible `Map<String, Object?>`. It stores one canonical representation internally (the OpenAI `{"type": "function", ...}` envelope) and derives the other provider shapes on demand in `encode(SchemaFormat)`:
@@ -415,6 +480,21 @@ final class _ToolRegistry extends ToolRegistry {
   ToolDefinition get sendEmail  => this['sendEmail']!;
 }
 ```
+
+### What this architecture unlocks
+
+The new parser/spec/emitter split is mainly an internal refactor, but it makes
+future schema work much safer:
+
+- More focused unit tests against `ToolSpec` and `SchemaSpec`, without fragile
+  generated-string assertions.
+- Provider-specific schema adapters, if future providers need them, without
+  duplicating Dart analysis logic.
+- Additional JSON Schema constraints such as string formats, numeric ranges,
+  list length limits, and richer object validation.
+- Clearer build-time diagnostics for unsupported strict-mode shapes.
+- Easier evolution of provider envelopes while keeping one canonical parameter
+  schema.
 
 ---
 

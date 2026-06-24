@@ -22,18 +22,23 @@ class ToolDefinition extends MapView<String, Object?> {
   /// The formats supported by this tool.
   final List<SchemaFormat> formats;
 
+  /// Whether this tool requests strict schema adherence where supported.
+  final bool strict;
+
   ToolDefinition({
     required this.name,
     required this.description,
     required this.parametersSchema,
     required this.handler,
     this.formats = SchemaFormat.values,
+    this.strict = false,
   }) : super({
          'type': 'function',
          'function': {
            'name': name,
            if (description.isNotEmpty) 'description': description,
            'parameters': parametersSchema,
+           if (strict) 'strict': true,
          },
        });
 
@@ -41,9 +46,11 @@ class ToolDefinition extends MapView<String, Object?> {
     required JsonObject schema,
     required this.handler,
     this.formats = SchemaFormat.values,
+    bool? strict,
   }) : name = extractName(schema),
        description = extractDescription(schema),
        parametersSchema = extractParametersSchema(schema),
+       strict = strict ?? extractStrict(schema),
        super(
          schema.containsKey('type') && schema['type'] == 'function'
              ? schema
@@ -78,6 +85,13 @@ class ToolDefinition extends MapView<String, Object?> {
     return const {};
   }
 
+  static bool extractStrict(JsonObject schema) {
+    if (schema['type'] == 'function' && schema['function'] is Map) {
+      return (schema['function'] as Map)['strict'] == true;
+    }
+    return schema['strict'] == true;
+  }
+
   /// Returns the provider-specific schema envelope for [format].
   ///
   /// Every tool supports every format by derivation — there is no
@@ -89,6 +103,7 @@ class ToolDefinition extends MapView<String, Object?> {
           'name': name,
           if (description.isNotEmpty) 'description': description,
           'input_schema': parametersSchema,
+          if (strict) 'strict': true,
         },
         SchemaFormat.gemini => {
           'name': name,

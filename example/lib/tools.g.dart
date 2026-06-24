@@ -19,7 +19,6 @@ const getWeatherParametersSchema = <String, Object?>{
       'enum': <String>['celsius', 'fahrenheit', 'kelvin'],
     },
   },
-
   'required': <String>['city'],
 };
 
@@ -46,7 +45,6 @@ const searchProductsParametersSchema = <String, Object?>{
     },
     'includeOutOfStock': <String, Object?>{'nullable': true, 'type': 'boolean'},
   },
-
   'required': <String>['query', 'maxResults'],
 };
 
@@ -81,7 +79,6 @@ const findNearbyPlacesParametersSchema = <String, Object?>{
       'type': 'string',
     },
   },
-
   'required': <String>['location', 'radiusKm'],
 };
 
@@ -111,13 +108,12 @@ const sendEmailParametersSchema = <String, Object?>{
       'type': 'string',
     },
     'cc': <String, Object?>{
-      'description': 'CC recipients',
+      'description': 'CC recipients for the mail',
       'nullable': true,
       'type': 'array',
       'items': <String, Object?>{'type': 'string'},
     },
   },
-
   'required': <String>['to', 'subject', 'body'],
 };
 
@@ -148,7 +144,7 @@ final class _ToolRegistry extends ToolRegistry {
 }
 
 /// The generated tool registry for this file.
-/// Use [toolRegistry.encodeAll] to select provider schemas,
+/// Use [toolRegistry.encode] to get provider-formatted schemas,
 /// and [toolRegistry.call] to dispatch model tool calls.
 final toolRegistry = _ToolRegistry([
   ToolDefinition(
@@ -170,7 +166,7 @@ final toolRegistry = _ToolRegistry([
               ToolRegistry.getOptionalArg<String>(args, 'unit'),
               'unit',
             ) ??
-            TemperatureUnit.celsius,
+            .celsius,
       );
     },
   ),
@@ -216,11 +212,7 @@ final toolRegistry = _ToolRegistry([
     name: 'sendEmail',
     description: 'Composes and sends an email message.',
     parametersSchema: sendEmailParametersSchema,
-    formats: const [
-      SchemaFormat.openAi,
-      SchemaFormat.anthropic,
-      SchemaFormat.gemini,
-    ],
+    formats: const [SchemaFormat.anthropic, SchemaFormat.openAi],
     handler: (JsonObject args) async {
       return sendEmail(
         ToolRegistry.getRequiredArg<String>(args, 'to'),

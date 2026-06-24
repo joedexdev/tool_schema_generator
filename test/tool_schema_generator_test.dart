@@ -732,6 +732,65 @@ void main() {
       );
     });
 
+    test('generates strict schemas when @Tool(strict: true)', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            class Location {
+              final double lat;
+              final double lng;
+              const Location({required this.lat, required this.lng});
+            }
+
+            @Tool(strict: true)
+            void find(Location location, {String? category}) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains("'strict': true"),
+              contains("'additionalProperties': false"),
+              contains("'required': <String>['location', 'category']"),
+              contains("'required': <String>['lat', 'lng']"),
+              contains("strict: true"),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test('rejects strict schemas with free-form map parameters', () async {
+      final result = await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(strict: true)
+            void process(Map<String, dynamic> payload) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+      );
+
+      expect(result.succeeded, isFalse);
+      expect(
+        result.errors.join('\n'),
+        contains('cannot be used with @Tool(strict: true)'),
+      );
+    });
+
     test('deduplicates repeated schema formats', () async {
       await testBuilder(
         _makeBuilder(),
@@ -1012,6 +1071,7 @@ class Tool {
   final String? name;
   final String? description;
   final List<SchemaFormat> formats;
+  final bool strict;
   const Tool({
     this.name,
     this.description,
@@ -1020,6 +1080,7 @@ class Tool {
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
     ],
+    this.strict = false,
   });
 }
 

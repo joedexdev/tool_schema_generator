@@ -45,19 +45,24 @@ Introduce compiler-neutral data structures representing the extracted metadata:
   - Each `SchemaSpec` knows how to render itself to Dart code (e.g., via a `.toDartSource()` method).
 
 ### 2. Benefits of the Spec AST Model
-- **Single-Pass Parsing**: Eliminates double-parsing of library elements.
-- **Improved Testability**: Allows writing unit tests directly against the parser output (`ToolSpec`) and `SchemaSpec` transformations without doing string matching on generated code.
-- **Programmatic Transformations (Strict Mode)**: Crucial for advanced schema options such as OpenAI Strict Mode.
+- **Classic Compiler Architecture**: Decouples Dart AST parsing from schema rendering, bringing maintainability and extensibility to the generation process.
+- **Single-Pass Parsing**: Eliminates double-parsing of library elements, improving performance.
+- **Improved Testability**: Allows writing unit tests directly against the parser output (`ToolSpec`) and `SchemaSpec` transformations without doing fragile string matching on generated code.
+- **Programmatic Transformations (Strict Mode)**: Crucial for advanced provider-agnostic schema options like Strict Mode.
 
 ---
 
-## Key Feature: OpenAI Strict Mode
+## Key Feature: Provider-Agnostic Strict Mode
 
-OpenAI supports a **Strict Mode** (`strict: true`) for tool calls, guaranteeing that the model's output will adhere exactly to the JSON Schema. This requires the parameters schema to:
-1. Set `"additionalProperties": false` on all object schemas.
-2. Require every defined property (including optional and nullable ones). Nullable fields must be typed as `["type", "null"]` or explicitly specify `'nullable': true`.
+The industry is moving toward strict schema adherence. With the **Schema AST Model**, transforming standard schemas into strict representations becomes trivial.
 
-Doing this with the current string-based generator is complex and fragile because the schema is already serialized. With the **Schema AST Model**, this transformation becomes trivial.
+*   **OpenAI (Structured Outputs):** Supports a `strict: true` mode guaranteeing the model's output perfectly matches the schema. This requires:
+    1. Setting `"additionalProperties": false` on all object schemas.
+    2. Requiring every defined property (including optional/nullable). Nullable fields must be typed properly (e.g., `["type", "null"]`).
+*   **Anthropic:** Introduced **Strict Tool Use** via `strict: true` using grammar-constrained sampling. They highly recommend setting `"additionalProperties": false` to prevent hallucinated parameters.
+*   **Gemini:** Enforces strict adherence natively (especially in `VALIDATED` or `ANY` function calling modes). A rigidly defined schema from our AST (with explicit required properties and nullability) inherently improves Gemini's reliability.
+
+Implementing these transformations with the current string-based generator is complex and fragile. The AST model solves this elegantly.
 
 ### Example Transformation with `SchemaSpec`
 If strict mode is enabled, we can run a recursive transformer over the `SchemaSpec`:
@@ -102,8 +107,8 @@ Update `ToolSchemaGenerator` to use the parsed `ToolSpec`s.
 - Rewrite generator logic to map `ToolSpec`s to Dart source code using the specifications and `SchemaSpec.toDartSource()`.
 - Ensure all existing tests in `tool_schema_generator_test.dart` remain green.
 
-### Phase 4: OpenAI Strict Mode Support
-Introduce strict mode configuration.
+### Phase 4: Provider-Agnostic Strict Mode Support
+Introduce generic strict mode configuration that benefits all supported providers (OpenAI, Anthropic, Gemini).
 - Update `@Tool()` annotation to support a `strict` flag:
   ```dart
   class Tool {
@@ -111,8 +116,9 @@ Introduce strict mode configuration.
     // ...
   }
   ```
-- Implement the strict transformer for `SchemaSpec`.
-- Update `ToolDefinition` and the generator to support emitting `strict: true` schemas.
+- Implement the strict transformer for `SchemaSpec`. Ensure the terminology remains generic and not tied solely to OpenAI.
+- Update `ToolDefinition` and the generator to support emitting `strict: true` schemas where supported by the provider adapter.
+- **Fallback / Validation Strategy**: Ensure the generator throws a clear, helpful compilation error during the build phase if the user attempts to use `strict: true` on a type that fundamentally cannot be made strict under the JSON Schema spec.
 - Add test cases checking that strict schemas have `additionalProperties: false` and all properties marked as `required`.
 
 ---

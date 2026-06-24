@@ -1,3 +1,42 @@
+## 1.0.0-dev1
+
+This release implements the next-phase generator architecture and adds
+provider-agnostic strict schemas without breaking the existing runtime API.
+
+### Added
+
+* **Provider-agnostic strict mode** via `@Tool(strict: true)`.
+  Strict tools generate closed object schemas with
+  `additionalProperties: false`, require every visible property, and emit
+  provider strict flags for OpenAI and Anthropic.
+* **Build-time strict validation** rejects Dart shapes that cannot be safely
+  represented as closed schemas, including `dynamic`, `void`, free-form maps,
+  raw lists, recursive object graphs, and nested fields with those shapes.
+
+### Internal
+
+* The generator now uses a compiler-style intermediate representation:
+  `ToolParser` extracts `ToolSpec` and `ParameterSpec` models, while
+  `TypeMapper` produces a structured `SchemaSpec` tree instead of raw schema
+  source strings.
+* Schema transformations, including strict mode, now operate on `SchemaSpec`
+  data before the final Dart source emitter runs.
+
+### Documentation
+
+* Documented strict mode, strict validation, the parser/spec/emitter pipeline,
+  and the future schema improvements unlocked by the new architecture.
+
+### Architecture Notes
+
+This release keeps the public runtime API backward compatible while making the
+generator easier to evolve. The new parser/spec/emitter split unlocks safer
+future work such as richer JSON Schema constraints, clearer strict-mode
+diagnostics, provider-specific envelope evolution, and more focused tests that
+do not depend on generated-string matching.
+
+---
+
 ## 1.0.0-dev0
 
 This release is a **pre-release milestone** that consolidates and formalises

@@ -66,8 +66,9 @@ void main() {
         ),
       ]);
 
-      final openAiSchema =
-          registry.encode(name: 'search', format: SchemaFormat.openAi).first;
+      final openAiSchema = registry
+          .encode(name: 'search', format: SchemaFormat.openAi)
+          .first;
       expect(openAiSchema['type'], 'function');
       expect((openAiSchema['function'] as Map)['name'], 'search');
 
@@ -79,6 +80,33 @@ void main() {
 
       expect(registry.encoded.length, 1);
       expect(registry.encode(format: SchemaFormat.anthropic).length, 1);
+    });
+
+    test('strict tools encode strict flag for supported providers', () {
+      final registry = ToolRegistry([
+        ToolDefinition(
+          name: 'search',
+          description: 'Search tool',
+          parametersSchema: const {'type': 'object'},
+          handler: (_) async => null,
+          strict: true,
+        ),
+      ]);
+
+      final openAiSchema = registry
+          .encode(name: 'search', format: SchemaFormat.openAi)
+          .first;
+      expect((openAiSchema['function'] as Map)['strict'], isTrue);
+
+      final anthropicSchema = registry
+          .encode(name: 'search', format: SchemaFormat.anthropic)
+          .first;
+      expect(anthropicSchema['strict'], isTrue);
+
+      final geminiSchema = registry
+          .encode(name: 'search', format: SchemaFormat.gemini)
+          .first;
+      expect(geminiSchema.containsKey('strict'), isFalse);
     });
 
     test('extend() composition works', () async {
