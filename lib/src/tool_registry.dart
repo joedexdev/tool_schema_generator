@@ -78,8 +78,9 @@ class ToolRegistry extends IterableBase<JsonObject> {
   bool contains(Object? element) {
     if (element is String) return _tools.containsKey(element);
     if (element is ToolDefinition) return _tools.containsKey(element.name);
-    if (element is Map && element.containsKey('name'))
+    if (element is Map && element.containsKey('name')) {
       return _tools.containsKey(element['name']);
+    }
     return _tools.values.contains(element);
   }
 
@@ -139,7 +140,6 @@ class ToolRegistry extends IterableBase<JsonObject> {
   List<JsonObject> get encoded => encode();
 
   // ── Dispatch ──────────────────────────────────────────────────────────────
-
 
   /// Invokes the tool registered under [name] with the provided [args] and
   /// returns the raw Dart function value.
