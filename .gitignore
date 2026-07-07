@@ -9,6 +9,9 @@ pubspec.lock
 # Directory created by dartdoc
 doc/api/
 
+# Test coverage output
+coverage/
+
 # OS generated files
 .DS_Store
 Thumbs.db

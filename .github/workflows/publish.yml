@@ -1,0 +1,67 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Verify tag matches pubspec version
+        run: |
+          version="$(sed -n 's/^version: //p' pubspec.yaml)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "Tag v$tag does not match pubspec version $version."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: dart pub get
+
+      - name: Check formatting
+        run: dart format --set-exit-if-changed lib test example
+
+      - name: Analyze
+        run: dart analyze
+
+      - name: Test
+        run: dart test
+
+      - name: Verify generated example output
+        working-directory: example
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code lib/tools.g.dart
+
+      - name: Validate pub package
+        run: dart pub publish --dry-run
+
+  publish:
+    name: Publish to pub.dev
+    needs: validate
+    permissions:
+      contents: read
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      environment: pub.dev

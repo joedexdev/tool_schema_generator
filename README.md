@@ -2,7 +2,7 @@
 
 A Dart code generator that automatically produces provider-compatible tool schemas for Large Language Models from annotated Dart functions — with a unified runtime registry for dispatch, validation, and multi-provider encoding.
 
-[![pub package](https://img.shields.io/pub/v/tool_schema_generator.svg)](https://pub.dev/packages/tool_schema_generator) [![coverage](https://img.shields.io/codecov/c/github/youssefdawoud-dev/tool_schema_generator?label=coverage)](https://codecov.io/gh/youssefdawoud-dev/tool_schema_generator) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![pub package](https://img.shields.io/pub/v/tool_schema_generator.svg)](https://pub.dev/packages/tool_schema_generator) [![CI](https://github.com/joedexdev/tool_schema_generator/actions/workflows/ci.yml/badge.svg)](https://github.com/joedexdev/tool_schema_generator/actions/workflows/ci.yml) [![coverage](https://img.shields.io/codecov/c/github/joedexdev/tool_schema_generator?label=coverage)](https://codecov.io/gh/joedexdev/tool_schema_generator) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
