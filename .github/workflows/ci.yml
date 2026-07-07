@@ -63,7 +63,8 @@ jobs:
     if: github.event_name == 'push'
     permissions:
       contents: read
-      id-token: write
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
       - name: Checkout
@@ -89,9 +90,19 @@ jobs:
             --packages=.dart_tool/package_config.json \
             --report-on=lib
 
-      - name: Upload coverage
+      - name: Upload LCOV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-report
+          path: coverage/lcov.info
+          if-no-files-found: error
+
+      - name: Upload coverage to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
-          use_oidc: true
+          token: ${{ env.CODECOV_TOKEN }}
           files: coverage/lcov.info
+          disable_search: true
+          plugins: noop
           fail_ci_if_error: true
