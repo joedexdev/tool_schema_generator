@@ -112,8 +112,10 @@ import 'tools.dart';
 // ── Encode schemas for your LLM ─────────────────────────────────────────────
 final response = await llm.generate(
   prompt: 'Send an email to hello@example.com saying Hi!',
-  tools: toolRegistry.encode(),                              // OpenAI (default)
-  // tools: toolRegistry.encode(format: SchemaFormat.gemini) // Gemini
+  tools: toolRegistry.encode(),                         // OpenAI Schema (default)
+  /// or choose your specific tool to be included!  
+  /// the package generate the <FUNCTION_NAME>ToolSchema 
+  // tools: [sendEmailToolSchema] 
   // tools: toolRegistry.encode(format: SchemaFormat.anthropic) // Anthropic
 );
 
@@ -151,6 +153,8 @@ final tools = [
 
 // Single tool by name
 final justSearch = toolRegistry.encode(name: 'search').first;
+// or again as mentioned by  using the <FUNCTION_NAME>ToolSchema syntax 
+const  justSearch  = searchToolSchema;
 ```
 
 ### `toolRegistry.encoded`
