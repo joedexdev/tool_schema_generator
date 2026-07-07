@@ -1,7 +1,8 @@
-import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
 
+import 'dart_source.dart';
+import 'tool_dispatch_emitter.dart';
 import 'tool_parser.dart';
 import 'tool_spec.dart';
 import 'type_mapper.dart';
@@ -23,31 +24,17 @@ class ToolSchemaGenerator extends Generator {
         ..writeln();
     }
 
-    output.writeln(_generateDispatcher(tools, typeMapper));
+    output.writeln(
+      _generateDispatcher(tools, ToolDispatchEmitter(library: library.element)),
+    );
     return output.toString();
   }
 
-  String _generateDispatcher(List<ToolSpec> tools, TypeMapper typeMapper) {
+  String _generateDispatcher(
+    List<ToolSpec> tools,
+    ToolDispatchEmitter dispatchEmitter,
+  ) {
     final buffer = StringBuffer();
-    final enumHelperNeeded = <String>{};
-    final classHelpers = <String, String>{};
-
-    for (final tool in tools) {
-      for (final param in tool.element.formalParameters) {
-        final element = param.type.element;
-        if (element is EnumElement && element.name != null) {
-          enumHelperNeeded.add(element.name!);
-        }
-        if (element is ClassElement && element.name != null) {
-          final name = element.name!;
-          final libUri = element.library.uri.toString();
-          if (!libUri.startsWith('dart:') && !classHelpers.containsKey(name)) {
-            final src = typeMapper.generateClassParser(element);
-            if (src != null) classHelpers[name] = src;
-          }
-        }
-      }
-    }
 
     buffer.writeln(
       '/// Generated registry - provides named schema getters and tool dispatch.',
@@ -60,7 +47,7 @@ class ToolSchemaGenerator extends Generator {
       final dartName = tool.element.name;
       buffer.writeln("  /// Tool definition for [$dartName].");
       buffer.writeln(
-        "  ToolDefinition get $dartName => this['${_escapeString(tool.name)}']!;",
+        '  ToolDefinition get $dartName => this[${dartStringLiteral(tool.name)}]!;',
       );
     }
 
@@ -74,9 +61,9 @@ class ToolSchemaGenerator extends Generator {
           'const [${tool.formats.map((f) => 'SchemaFormat.${f.name}').join(', ')}]';
 
       toolsBuffer.writeln('  ToolDefinition(');
-      toolsBuffer.writeln("    name: '${_escapeString(tool.name)}',");
+      toolsBuffer.writeln('    name: ${dartStringLiteral(tool.name)},');
       toolsBuffer.writeln(
-        "    description: '${_escapeString(tool.description)}',",
+        '    description: ${dartStringLiteral(tool.description)},',
       );
       toolsBuffer.writeln('    parametersSchema: $paramVarName,');
       toolsBuffer.writeln('    formats: $formatsListLiteral,');
@@ -88,12 +75,7 @@ class ToolSchemaGenerator extends Generator {
       final positionalArgs = <String>[];
       final namedArgs = <String>[];
       for (final param in tool.parameters) {
-        final expr = typeMapper.generateArgParser(
-          param.element.type,
-          param.name,
-          defaultCode: param.defaultValueCode,
-          isRequired: param.isRequired,
-        );
+        final expr = dispatchEmitter.argumentExpression(param);
         if (param.isNamed) {
           namedArgs.add('${param.name}: $expr');
         } else {
@@ -116,31 +98,7 @@ class ToolSchemaGenerator extends Generator {
     buffer.writeln(']);');
     buffer.writeln();
 
-    if (enumHelperNeeded.isNotEmpty || classHelpers.isNotEmpty) {
-      buffer.writeln('// ignore: unused_element');
-      buffer.writeln('T? _parseEnum<T extends Enum>(');
-      buffer.writeln('  List<T> values,');
-      buffer.writeln('  String? raw,');
-      buffer.writeln('  String field,');
-      buffer.writeln(') {');
-      buffer.writeln('  if (raw == null) return null;');
-      buffer.writeln('  for (final value in values) {');
-      buffer.writeln('    if (value.name == raw) return value;');
-      buffer.writeln('  }');
-      buffer.writeln('  throw InvalidToolArgumentException(');
-      buffer.writeln('    field: field,');
-      buffer.writeln(
-        "    message: 'Invalid enum value \"\$raw\" for \"\$field\".',",
-      );
-      buffer.writeln('    expected: values.map((e) => e.name).toList(),');
-      buffer.writeln('    actual: raw,');
-      buffer.writeln('  );');
-      buffer.writeln('}');
-      buffer.writeln();
-    }
-
-    for (final src in classHelpers.values) {
-      buffer.writeln('// ignore: unused_element');
+    for (final src in dispatchEmitter.helperSources) {
       buffer.writeln(src);
     }
 
@@ -151,7 +109,7 @@ class ToolSchemaGenerator extends Generator {
     final buffer = StringBuffer();
     final paramVarName = '${tool.element.name}ParametersSchema';
     buffer.writeln(
-      'const $paramVarName = ${tool.parametersSchema.toDartSource()};',
+      'const $paramVarName = ${tool.parametersSchema.toDartSource(useNullUnion: tool.strict)};',
     );
     buffer.writeln();
 
@@ -159,8 +117,10 @@ class ToolSchemaGenerator extends Generator {
     buffer.writeln('const $toolVarName = <String, Object?>{');
     buffer.writeln("  'type': 'function',");
     buffer.writeln("  'function': <String, Object?>{");
-    buffer.writeln("    'name': '${_escapeString(tool.name)}',");
-    buffer.writeln("    'description': '${_escapeString(tool.description)}',");
+    buffer.writeln("    'name': ${dartStringLiteral(tool.name)},");
+    buffer.writeln(
+      "    'description': ${dartStringLiteral(tool.description)},",
+    );
     buffer.writeln("    'parameters': $paramVarName,");
     if (tool.strict) {
       buffer.writeln("    'strict': true,");
@@ -169,12 +129,5 @@ class ToolSchemaGenerator extends Generator {
     buffer.writeln('};');
 
     return buffer.toString();
-  }
-
-  String _escapeString(String input) {
-    return input
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n');
   }
 }

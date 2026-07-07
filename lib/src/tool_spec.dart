@@ -40,5 +40,5 @@ final class ParameterSpec {
   final bool isNamed;
   final bool isInjected;
   final String? defaultValueCode;
-  final SchemaSpec schema;
+  final SchemaSpec? schema;
 }

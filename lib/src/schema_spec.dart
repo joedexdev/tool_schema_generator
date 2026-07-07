@@ -1,3 +1,5 @@
+import 'dart_source.dart';
+
 /// Internal JSON Schema representation used by the generator.
 ///
 /// These objects keep schema analysis separate from Dart source rendering.
@@ -14,16 +16,23 @@ sealed class SchemaSpec {
 
   SchemaSpec toStrict();
 
-  String toDartSource();
+  String toDartSource({bool useNullUnion = false});
 
-  String renderEntries(List<String> entries) {
+  String renderEntries(List<String> entries, {required bool useNullUnion}) {
     final allEntries = <String>[
       if (description != null)
-        "'description': '${_escapeString(description!)}'",
-      if (isNullable) "'nullable': true",
+        "'description': ${dartStringLiteral(description!)}",
+      if (isNullable && !useNullUnion) "'nullable': true",
       ...entries,
     ];
     return '<String, Object?>{${allEntries.join(', ')}}';
+  }
+
+  String typeEntry(String type, {required bool useNullUnion}) {
+    if (isNullable && useNullUnion) {
+      return "'type': <String>['$type', 'null']";
+    }
+    return "'type': '$type'";
   }
 }
 
@@ -41,7 +50,9 @@ final class StringSchemaSpec extends SchemaSpec {
   StringSchemaSpec toStrict() => this;
 
   @override
-  String toDartSource() => renderEntries(["'type': 'string'"]);
+  String toDartSource({bool useNullUnion = false}) => renderEntries([
+    typeEntry('string', useNullUnion: useNullUnion),
+  ], useNullUnion: useNullUnion);
 }
 
 final class IntegerSchemaSpec extends SchemaSpec {
@@ -58,7 +69,9 @@ final class IntegerSchemaSpec extends SchemaSpec {
   IntegerSchemaSpec toStrict() => this;
 
   @override
-  String toDartSource() => renderEntries(["'type': 'integer'"]);
+  String toDartSource({bool useNullUnion = false}) => renderEntries([
+    typeEntry('integer', useNullUnion: useNullUnion),
+  ], useNullUnion: useNullUnion);
 }
 
 final class NumberSchemaSpec extends SchemaSpec {
@@ -75,7 +88,9 @@ final class NumberSchemaSpec extends SchemaSpec {
   NumberSchemaSpec toStrict() => this;
 
   @override
-  String toDartSource() => renderEntries(["'type': 'number'"]);
+  String toDartSource({bool useNullUnion = false}) => renderEntries([
+    typeEntry('number', useNullUnion: useNullUnion),
+  ], useNullUnion: useNullUnion);
 }
 
 final class BooleanSchemaSpec extends SchemaSpec {
@@ -92,7 +107,9 @@ final class BooleanSchemaSpec extends SchemaSpec {
   BooleanSchemaSpec toStrict() => this;
 
   @override
-  String toDartSource() => renderEntries(["'type': 'boolean'"]);
+  String toDartSource({bool useNullUnion = false}) => renderEntries([
+    typeEntry('boolean', useNullUnion: useNullUnion),
+  ], useNullUnion: useNullUnion);
 }
 
 final class ArraySchemaSpec extends SchemaSpec {
@@ -119,10 +136,11 @@ final class ArraySchemaSpec extends SchemaSpec {
   ArraySchemaSpec toStrict() => copyWith(items: items?.toStrict());
 
   @override
-  String toDartSource() => renderEntries([
-    "'type': 'array'",
-    if (items != null) "'items': ${items!.toDartSource()}",
-  ]);
+  String toDartSource({bool useNullUnion = false}) => renderEntries([
+    typeEntry('array', useNullUnion: useNullUnion),
+    if (items != null)
+      "'items': ${items!.toDartSource(useNullUnion: useNullUnion)}",
+  ], useNullUnion: useNullUnion);
 }
 
 final class ObjectSchemaSpec extends SchemaSpec {
@@ -161,27 +179,25 @@ final class ObjectSchemaSpec extends SchemaSpec {
   );
 
   @override
-  String toDartSource() {
-    final entries = <String>["'type': 'object'"];
+  String toDartSource({bool useNullUnion = false}) {
+    final entries = <String>[typeEntry('object', useNullUnion: useNullUnion)];
     if (properties.isNotEmpty) {
       final propertyEntries = properties.entries
           .map(
             (entry) =>
-                "'${_escapeString(entry.key)}': ${entry.value.toDartSource()}",
+                '${dartStringLiteral(entry.key)}: ${entry.value.toDartSource(useNullUnion: useNullUnion)}',
           )
           .join(', ');
       entries.add("'properties': <String, Object?>{$propertyEntries}");
     }
     if (required.isNotEmpty) {
-      final requiredItems = required
-          .map((name) => "'${_escapeString(name)}'")
-          .join(', ');
+      final requiredItems = required.map(dartStringLiteral).join(', ');
       entries.add("'required': <String>[$requiredItems]");
     }
     if (additionalProperties != null) {
       entries.add("'additionalProperties': $additionalProperties");
     }
-    return renderEntries(entries);
+    return renderEntries(entries, useNullUnion: useNullUnion);
   }
 }
 
@@ -209,17 +225,11 @@ final class EnumSchemaSpec extends SchemaSpec {
   EnumSchemaSpec toStrict() => this;
 
   @override
-  String toDartSource() {
-    final enumValues = values
-        .map((value) => "'${_escapeString(value)}'")
-        .join(', ');
-    return renderEntries(["'type': 'string'", "'enum': <String>[$enumValues]"]);
+  String toDartSource({bool useNullUnion = false}) {
+    final enumValues = values.map(dartStringLiteral).join(', ');
+    return renderEntries([
+      typeEntry('string', useNullUnion: useNullUnion),
+      "'enum': <String>[$enumValues]",
+    ], useNullUnion: useNullUnion);
   }
-}
-
-String _escapeString(String input) {
-  return input
-      .replaceAll('\\', '\\\\')
-      .replaceAll("'", "\\'")
-      .replaceAll('\n', '\\n');
 }

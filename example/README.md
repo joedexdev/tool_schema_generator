@@ -16,7 +16,7 @@ The sample covers:
 
 ```yaml
 dependencies:
-  tool_schema_generator: ^1.0.0-dev1
+  tool_schema_generator: ^1.0.0
 
 dev_dependencies:
   build_runner: ^2.4.0
@@ -42,4 +42,5 @@ void findNearbyPlaces(GeoLocation location) {}
 ```
 
 Strict tools close object schemas with `additionalProperties: false`, require
-all visible properties, and emit strict provider flags where supported.
+all visible properties, render nullable fields as JSON Schema type unions, and
+emit strict provider flags where supported.

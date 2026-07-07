@@ -264,6 +264,51 @@ void main() {
       );
     });
 
+    test('escapes generated Dart string literals', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': r'''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(
+              name: r'lookup_$price',
+              description: 'Cost is \$5\nOwner\'s path C:\\tmp\r\t',
+            )
+            void literalTool(
+              @Describe('Use \$query\nC:\\tmp\r\t') String query$,
+              double amount$,
+            ) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains(r"'name': 'lookup_\$price'"),
+              contains(
+                r"description: 'Cost is \$5\nOwner\'s path C:\\tmp\r\t'",
+              ),
+              contains(
+                r"'description': 'Cost is \$5\nOwner\'s path C:\\tmp\r\t'",
+              ),
+              contains(r"'description': 'Use \$query\nC:\\tmp\r\t'"),
+              contains(r"'query\$': <String, Object?>{"),
+              contains(r"ToolRegistry.getRequiredArg<String>(args, 'query\$')"),
+              contains(r"'amount\$': <String, Object?>{"),
+              contains(r"ToolRegistry.getRequiredDoubleArg(args, 'amount\$')"),
+              contains(
+                r"ToolDefinition get literalTool => this['lookup_\$price']!;",
+              ),
+            ]),
+          ),
+        },
+      );
+    });
+
     // ------------------------------------------------------------------
     // Multi-line doc comment
     // ------------------------------------------------------------------
@@ -357,6 +402,36 @@ void main() {
       );
     });
 
+    test('uses import prefixes for imported enum parameters', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/a.dart': '''
+            enum Priority { low, high }
+          ''',
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            import 'a.dart' as a;
+            part 'test.g.dart';
+
+            @Tool()
+            void setPriority(a.Priority priority) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains('T? _parseEnum<T extends Enum>('),
+              contains('a.Priority.values,'),
+            ]),
+          ),
+        },
+      );
+    });
+
     // ------------------------------------------------------------------
     // Nested class parameter
     // ------------------------------------------------------------------
@@ -427,6 +502,174 @@ void main() {
                 contains('_parseEnum('),
                 contains('Priority.values'),
                 contains("'priority': <String, Object?>"),
+              ]),
+            ),
+          },
+        );
+      },
+    );
+
+    test(
+      'uses import prefixes for enum fields inside imported class helpers',
+      () async {
+        await testBuilder(
+          _makeBuilder(),
+          {
+            'tool_schema_generator|lib/tool_schema_generator.dart':
+                _annotationSource,
+            '_test|lib/a.dart': '''
+            enum Priority { low, high }
+
+            class Task {
+              final Priority priority;
+              const Task({this.priority = Priority.low});
+            }
+          ''',
+            '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            import 'a.dart' as a;
+            part 'test.g.dart';
+
+            @Tool()
+            void create(a.Task task) {}
+          ''',
+          },
+          generateFor: {'_test|lib/test.dart'},
+          outputs: {
+            '_test|lib/test.tool_schema.g.part': decodedMatches(
+              allOf([
+                contains('a.Task _parseTask(JsonObject m) =>'),
+                contains('a.Priority.values,'),
+                contains('a.Priority.low'),
+              ]),
+            ),
+          },
+        );
+      },
+    );
+
+    test('generates parser helpers for nested class fields', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            class Inner {
+              final String value;
+              const Inner({required this.value});
+            }
+
+            class Outer {
+              final Inner inner;
+              const Outer({required this.inner});
+            }
+
+            @Tool()
+            void create(Outer outer) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains('Outer _parseOuter(JsonObject m) =>'),
+              contains('Inner _parseInner(JsonObject m) =>'),
+              contains(
+                "inner: _parseInner(ToolRegistry.getRequiredObjectArg(m, 'inner'))",
+              ),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test('deduplicates parser helpers for repeated custom classes', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            class Address {
+              final String city;
+              const Address({required this.city});
+            }
+
+            @Tool()
+            void ship(Address address) {}
+
+            @Tool()
+            void bill(Address address) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains('Address _parseAddress(JsonObject m) =>'),
+              predicate<String>(
+                (output) =>
+                    RegExp(
+                      r'Address _parseAddress\(JsonObject m\) =>',
+                    ).allMatches(output).length ==
+                    1,
+                'one Address parser helper',
+              ),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test(
+      'disambiguates parser helpers for imported class name collisions',
+      () async {
+        await testBuilder(
+          _makeBuilder(),
+          {
+            'tool_schema_generator|lib/tool_schema_generator.dart':
+                _annotationSource,
+            '_test|lib/a.dart': '''
+            class Config {
+              final String value;
+              const Config({required this.value});
+            }
+          ''',
+            '_test|lib/b.dart': '''
+            class Config {
+              final int value;
+              const Config({required this.value});
+            }
+          ''',
+            '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            import 'a.dart' as a;
+            import 'b.dart' as b;
+            part 'test.g.dart';
+
+            @Tool()
+            void configure(a.Config first, b.Config second) {}
+          ''',
+          },
+          generateFor: {'_test|lib/test.dart'},
+          outputs: {
+            '_test|lib/test.tool_schema.g.part': decodedMatches(
+              allOf([
+                contains('a.Config _parseConfig(JsonObject m) =>'),
+                contains('b.Config _parseConfig2(JsonObject m) =>'),
+                contains(
+                  "_parseConfig(ToolRegistry.getRequiredObjectArg(args, 'first'))",
+                ),
+                contains(
+                  "_parseConfig2(ToolRegistry.getRequiredObjectArg(args, 'second'))",
+                ),
               ]),
             ),
           },
@@ -767,6 +1010,77 @@ void main() {
       );
     });
 
+    test('renders strict nullable parameters as null unions', () async {
+      await testBuilder(
+        _makeBuilder(),
+        {
+          'tool_schema_generator|lib/tool_schema_generator.dart':
+              _annotationSource,
+          '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            @Tool(strict: true)
+            void find({String? category, int? limit}) {}
+          ''',
+        },
+        generateFor: {'_test|lib/test.dart'},
+        outputs: {
+          '_test|lib/test.tool_schema.g.part': decodedMatches(
+            allOf([
+              contains("'required': <String>['category', 'limit']"),
+              contains("'category': <String, Object?>{"),
+              contains("'type': <String>['string', 'null']"),
+              contains("'limit': <String, Object?>{"),
+              contains("'type': <String>['integer', 'null']"),
+              contains("'additionalProperties': false"),
+              isNot(contains("'nullable': true")),
+            ]),
+          ),
+        },
+      );
+    });
+
+    test(
+      'renders strict nullable nested object fields as null unions',
+      () async {
+        await testBuilder(
+          _makeBuilder(),
+          {
+            'tool_schema_generator|lib/tool_schema_generator.dart':
+                _annotationSource,
+            '_test|lib/test.dart': '''
+            import 'package:tool_schema_generator/tool_schema_generator.dart';
+            part 'test.g.dart';
+
+            class Details {
+              final String? note;
+              const Details({this.note});
+            }
+
+            @Tool(strict: true)
+            void create(Details? details) {}
+          ''',
+          },
+          generateFor: {'_test|lib/test.dart'},
+          outputs: {
+            '_test|lib/test.tool_schema.g.part': decodedMatches(
+              allOf([
+                contains("'required': <String>['details']"),
+                contains("'details': <String, Object?>{"),
+                contains("'type': <String>['object', 'null']"),
+                contains("'required': <String>['note']"),
+                contains("'note': <String, Object?>{"),
+                contains("'type': <String>['string', 'null']"),
+                contains("'additionalProperties': false"),
+                isNot(contains("'nullable': true")),
+              ]),
+            ),
+          },
+        );
+      },
+    );
+
     test('rejects strict schemas with free-form map parameters', () async {
       final result = await testBuilder(
         _makeBuilder(),
@@ -938,10 +1252,10 @@ void main() {
     });
 
     // ------------------------------------------------------------------
-    // Non-function element annotated with @Tool — should be skipped
+    // Non-function element annotated with @Tool — should fail clearly
     // ------------------------------------------------------------------
-    test('skips non-function elements annotated with @Tool', () async {
-      await testBuilder(
+    test('rejects non-function elements annotated with @Tool', () async {
+      final result = await testBuilder(
         _makeBuilder(),
         {
           'tool_schema_generator|lib/tool_schema_generator.dart':
@@ -955,7 +1269,12 @@ void main() {
           ''',
         },
         generateFor: {'_test|lib/test.dart'},
-        // Should not produce any output since @Tool is on a class
+      );
+
+      expect(result.succeeded, isFalse);
+      expect(
+        result.errors.join('\n'),
+        contains('@Tool() can only be applied to top-level functions.'),
       );
     });
 
@@ -1061,12 +1380,15 @@ void main() {
 /// the test's asset graph. This must match the public API of the
 /// `tool_schema_generator` package.
 const _annotationSource = '''
+import 'package:meta/meta_meta.dart';
+
 enum SchemaFormat {
   openAi,
   anthropic,
   gemini,
 }
 
+@Target({TargetKind.function})
 class Tool {
   final String? name;
   final String? description;
@@ -1084,11 +1406,13 @@ class Tool {
   });
 }
 
+@Target({TargetKind.parameter})
 class Describe {
   final String description;
   const Describe(this.description);
 }
 
+@Target({TargetKind.parameter})
 class Inject {
   const Inject();
 }

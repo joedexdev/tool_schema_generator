@@ -1,3 +1,31 @@
+## 1.0.0
+
+Stable 1.0 release. This keeps the `1.0.0-dev1` architecture and strict-mode
+work intact, and adds the final hardening needed for the stable package.
+
+### Added
+
+* **Analyzer-visible annotation targets** for `@Tool`, `@Describe`, and
+  `@Inject`, so invalid annotation placement is reported earlier in IDEs.
+* **Strict nullable schemas use JSON Schema unions** such as
+  `{"type": ["string", "null"]}` instead of generated `"nullable": true`.
+  Non-strict nullable output remains backward compatible.
+
+### Fixed
+
+* Generated Dart string literals now safely escape dollar signs, quotes,
+  backslashes, newlines, carriage returns, tabs, and control characters.
+* Invalid `@Tool()` placement now fails generation with a clear diagnostic
+  instead of being skipped.
+
+### Documentation
+
+* Updated installation snippets for `^1.0.0`.
+* Documented strict nullable union rendering and annotation placement
+  diagnostics.
+
+---
+
 ## 1.0.0-dev1
 
 This release implements the next-phase generator architecture and adds

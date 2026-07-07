@@ -32,7 +32,7 @@ void main() {
       expect(query.isRequired, isTrue);
       expect(query.isInjected, isFalse);
       expect(query.schema, isA<StringSchemaSpec>());
-      expect(query.schema.description, 'Search text');
+      expect(query.schema!.description, 'Search text');
 
       final limit = tool.parameters.firstWhere((p) => p.name == 'limit');
       expect(limit.isRequired, isFalse);
@@ -40,6 +40,7 @@ void main() {
 
       final userId = tool.parameters.firstWhere((p) => p.name == 'userId');
       expect(userId.isInjected, isTrue);
+      expect(userId.schema, isNull);
       expect(tool.parametersSchema.properties.keys, ['query', 'limit']);
       expect(tool.parametersSchema.required, ['query']);
     });
@@ -121,6 +122,29 @@ void main() {
         throwsA(isA<InvalidGenerationSourceError>()),
       );
     });
+
+    test('rejects strict tools with recursive object graphs', () async {
+      await expectLater(
+        () => _parseTools('''
+          import 'package:tool_schema_generator/tool_schema_generator.dart';
+
+          class Node {
+            final Node? next;
+            const Node({this.next});
+          }
+
+          @Tool(strict: true)
+          void process(Node node) {}
+        '''),
+        throwsA(
+          isA<InvalidGenerationSourceError>().having(
+            (error) => error.message,
+            'message',
+            contains('recursive object types'),
+          ),
+        ),
+      );
+    });
   });
 }
 
@@ -147,12 +171,15 @@ Future<List<ToolSpec>> _parseTools(String source) async {
 }
 
 const _annotationSource = '''
+import 'package:meta/meta_meta.dart';
+
 enum SchemaFormat {
   openAi,
   anthropic,
   gemini,
 }
 
+@Target({TargetKind.function})
 class Tool {
   final String? name;
   final String? description;
@@ -170,11 +197,13 @@ class Tool {
   });
 }
 
+@Target({TargetKind.parameter})
 class Describe {
   final String description;
   const Describe(this.description);
 }
 
+@Target({TargetKind.parameter})
 class Inject {
   const Inject();
 }

@@ -1,3 +1,5 @@
+import 'package:meta/meta_meta.dart';
+
 /// Provider schema formats that can be generated for a tool.
 enum SchemaFormat {
   /// OpenAI function tool shape.
@@ -30,6 +32,7 @@ enum SchemaFormat {
 ///   // ...
 /// }
 /// ```
+@Target({TargetKind.function})
 class Tool {
   /// Optional override for the tool name.
   ///
@@ -80,6 +83,7 @@ class Tool {
 ///   @Describe('Maximum number of results to return') int limit,
 /// ) {}
 /// ```
+@Target({TargetKind.parameter})
 class Describe {
   /// The human-readable description for this parameter.
   final String description;
@@ -107,6 +111,7 @@ class Describe {
 ///   @Inject() String locale = 'en',
 /// }) {}
 /// ```
+@Target({TargetKind.parameter})
 class Inject {
   /// Creates an [Inject] annotation.
   const Inject();

@@ -1,7 +1,6 @@
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
-import 'package:analyzer/dart/element/type.dart';
 import 'package:source_gen/source_gen.dart';
 import 'package:tool_schema_generator/tool_schema_generator.dart';
 
@@ -31,25 +30,28 @@ final class ToolParser {
   List<ToolSpec> parse(LibraryReader library) {
     final tools = <ToolSpec>[];
 
-    for (final element in library.allElements) {
-      if (element is! TopLevelFunctionElement) continue;
-      if (!_toolTypeChecker.hasAnnotationOfExact(element)) continue;
+    for (final annotated in library.annotatedWithExact(_toolTypeChecker)) {
+      final element = annotated.element;
+      if (element is! TopLevelFunctionElement) {
+        throw InvalidGenerationSourceError(
+          '@Tool() can only be applied to top-level functions.',
+          element: element,
+          todo: 'Move @Tool() to a top-level function declaration.',
+        );
+      }
 
-      final annotation = _toolTypeChecker.firstAnnotationOfExact(element);
-      if (annotation == null) continue;
-
-      final reader = ConstantReader(annotation);
+      final reader = annotated.annotation;
       final parameters = _parseParameters(element);
-      final visibleParameters = parameters.where((p) => !p.isInjected);
       final properties = <String, SchemaSpec>{
-        for (final param in visibleParameters) param.name: param.schema,
+        for (final param in parameters)
+          if (param.schema != null) param.name: param.schema!,
       };
       final required = [
-        for (final param in visibleParameters)
-          if (param.isRequired) param.name,
+        for (final param in parameters)
+          if (!param.isInjected && param.isRequired) param.name,
       ];
       final strict = reader.peek('strict')?.boolValue ?? false;
-      if (strict) _validateStrictParameters(element, parameters);
+      if (strict) _validateStrictParameters(parameters);
 
       final parametersSchema = ObjectSchemaSpec(
         properties: properties,
@@ -87,11 +89,7 @@ final class ToolParser {
       final isInjected = _hasAnnotation(param, _injectTypeChecker);
       if (isInjected) _validateInjectedParameter(function, param);
 
-      final describeAnnotation = _findDescribeAnnotation(param);
-      final mappedSchema = typeMapper.mapType(param.type);
-      final schema = describeAnnotation == null
-          ? mappedSchema
-          : mappedSchema.withDescription(describeAnnotation);
+      final schema = isInjected ? null : _parameterSchema(param);
 
       parameters.add(
         ParameterSpec(
@@ -109,12 +107,17 @@ final class ToolParser {
     return parameters;
   }
 
-  void _validateStrictParameters(
-    TopLevelFunctionElement function,
-    List<ParameterSpec> parameters,
-  ) {
+  SchemaSpec _parameterSchema(FormalParameterElement param) {
+    final describeAnnotation = _findDescribeAnnotation(param);
+    final mappedSchema = typeMapper.mapType(param.type);
+    return describeAnnotation == null
+        ? mappedSchema
+        : mappedSchema.withDescription(describeAnnotation);
+  }
+
+  void _validateStrictParameters(List<ParameterSpec> parameters) {
     for (final param in parameters.where((p) => !p.isInjected)) {
-      final reason = _strictIncompatibilityReason(param.element.type);
+      final reason = typeMapper.strictIncompatibilityReason(param.element.type);
       if (reason == null) continue;
 
       throw InvalidGenerationSourceError(
@@ -124,61 +127,6 @@ final class ToolParser {
             'Use a concrete Dart type with statically known fields, or remove strict: true.',
       );
     }
-  }
-
-  String? _strictIncompatibilityReason(
-    DartType type, [
-    Set<String> processingStack = const {},
-  ]) {
-    if (type is DynamicType) {
-      return 'dynamic values do not have a statically describable JSON schema.';
-    }
-    if (type is VoidType) {
-      return 'void values do not have a JSON schema.';
-    }
-    if (type.isDartCoreMap) {
-      return 'map values are free-form objects and cannot be closed with additionalProperties: false.';
-    }
-
-    if (type.isDartCoreList && type is InterfaceType) {
-      if (type.typeArguments.isEmpty) {
-        return 'raw lists do not declare an item schema.';
-      }
-      return _strictIncompatibilityReason(
-        type.typeArguments.first,
-        processingStack,
-      );
-    }
-
-    final element = type.element;
-    if (element is! ClassElement || type is! InterfaceType) return null;
-
-    final libUri = element.library.uri.toString();
-    if (libUri.startsWith('dart:')) return null;
-
-    final className = element.name;
-    if (className == null) return null;
-    if (processingStack.contains(className)) {
-      return 'recursive object types cannot be represented as finite strict schemas.';
-    }
-
-    final constructor =
-        element.unnamedConstructor ?? element.constructors.firstOrNull;
-    if (constructor == null) return null;
-
-    final nextStack = {...processingStack, className};
-    for (final constructorParam in constructor.formalParameters) {
-      final reason = _strictIncompatibilityReason(
-        constructorParam.type,
-        nextStack,
-      );
-      if (reason != null) {
-        final nestedName = constructorParam.name ?? '<unnamed>';
-        return 'field "$nestedName" is not strict-compatible: $reason';
-      }
-    }
-
-    return null;
   }
 
   void _validateInjectedParameter(

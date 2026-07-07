@@ -35,8 +35,7 @@ class GeoLocation {
 @Tool()
 String getWeather(
   @Describe('The name of the city to look up') String city, {
-  @Describe('The unit for temperature values')
-  TemperatureUnit unit = .celsius,
+  @Describe('The unit for temperature values') TemperatureUnit unit = .celsius,
 }) {
   return '{"temp": 22, "unit": "$unit", "city": "$city"}';
 }
@@ -62,7 +61,10 @@ Map<String, dynamic> findNearbyPlaces(
 }
 
 /// Sends an email message to the specified recipients.
-@Tool(description: 'Composes and sends an email message.',formats: [.anthropic, .openAi])
+@Tool(
+  description: 'Composes and sends an email message.',
+  formats: [.anthropic, .openAi],
+)
 void sendEmail(
   @Describe('Recipient email address') String to,
   @Describe('Email subject line') String subject,

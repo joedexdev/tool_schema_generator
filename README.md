@@ -2,7 +2,7 @@
 
 A Dart code generator that automatically produces provider-compatible tool schemas for Large Language Models from annotated Dart functions — with a unified runtime registry for dispatch, validation, and multi-provider encoding.
 
-[![pub package](https://img.shields.io/pub/v/tool_schema_generator.svg)](https://pub.dev/packages/tool_schema_generator)
+[![pub package](https://img.shields.io/pub/v/tool_schema_generator.svg)](https://pub.dev/packages/tool_schema_generator) [![coverage](https://img.shields.io/codecov/c/github/youssefdawoud-dev/tool_schema_generator?label=coverage)](https://codecov.io/gh/youssefdawoud-dev/tool_schema_generator) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -39,11 +39,40 @@ No hand-written JSON. No duplicated schemas. One source of truth.
 
 ```yaml
 dependencies:
-  tool_schema_generator: ^1.0.0-dev1
+  tool_schema_generator: ^1.0.0
 
 dev_dependencies:
   build_runner: ^2.4.0
 ```
+
+---
+
+## Migrating From 0.4.x
+
+See the full [migration guide](MIGRATION.md) for detailed before/after
+examples.
+
+For most projects, the upgrade is:
+
+- Rename `SchemaFlavor` to `SchemaFormat`.
+- Rename `flavors:` to `formats:` in `@Tool(...)` and `ToolDefinition(...)`.
+- Replace `toolRegistry.encodeAll(flavor)` with
+  `toolRegistry.encode(format: format)`.
+- Replace `toolRegistry.encode(name, flavor)` with
+  `toolRegistry.encode(name: name, format: format)`.
+- Treat every `encode(...)` result as `List<JsonObject>`; use `.first` when
+  you need one schema object.
+- Keep `@Tool()` on top-level functions. Invalid placements are now analyzer
+  and generator errors.
+- Regenerate generated files:
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+Strict mode is opt-in with `@Tool(strict: true)`. In strict schemas, nullable
+Dart types render as JSON Schema unions such as
+`{"type": ["string", "null"]}`; non-strict schemas keep `"nullable": true`.
 
 ---
 
@@ -172,6 +201,8 @@ final combined = registryA.extend(registryB);
 ### `@Tool()`
 
 Marks a top-level function as an LLM-callable tool.
+The annotation is targeted to top-level functions, so invalid placements are
+reported by the analyzer and by the generator.
 
 ```dart
 @Tool(
@@ -246,6 +277,8 @@ emitted:
 
 - Every visible parameter is listed in `required`, including nullable and
   defaulted parameters.
+- Nullable schemas use JSON Schema union types such as
+  `{"type": ["string", "null"]}` instead of `"nullable": true`.
 - Every object schema, including nested custom classes, gets
   `"additionalProperties": false`.
 - OpenAI and Anthropic envelopes include `"strict": true`.
@@ -303,7 +336,7 @@ The generator maps Dart types to JSON Schema types:
 | `bool` | `{"type": "boolean"}` |
 | `List<T>` | `{"type": "array", "items": <schema for T>}` |
 | `Map<String, Object?>` | `{"type": "object"}` |
-| `T?` (nullable) | adds `"nullable": true` to the schema |
+| `T?` (nullable) | non-strict schemas add `"nullable": true`; strict schemas use JSON Schema unions such as `{"type": ["string", "null"]}` |
 | `enum Foo { a, b }` | `{"type": "string", "enum": ["a", "b"]}` |
 | Custom class `Foo` | `{"type": "object", "properties": {...}, "required": [...]}` |
 
@@ -399,7 +432,7 @@ Dart elements
   -> ToolParser
   -> ToolSpec / ParameterSpec / SchemaSpec
   -> optional strict schema transform
-  -> Dart source emitter
+  -> ToolSchemaGenerator / ToolDispatchEmitter
 ```
 
 This keeps Dart analysis, schema transformation, and source rendering separate.
@@ -410,8 +443,8 @@ the generated `toolRegistry`.
 
 `TypeMapper` maps Dart types into an internal `SchemaSpec` tree instead of
 building schema source strings directly. `ToolParser` then wraps those schema
-nodes into `ToolSpec` and `ParameterSpec` models. The emitter is the only layer
-that turns those specs into generated Dart source.
+nodes into `ToolSpec` and `ParameterSpec` models. The emitters are the only
+layers that turn those specs into generated Dart source.
 
 That split matters because schema changes can now be tested and transformed as
 data. Strict mode, for example, recursively walks the `SchemaSpec` tree to close
