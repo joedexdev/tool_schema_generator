@@ -348,6 +348,11 @@ toolRegistry.encode(format: SchemaFormat.anthropic); // includes it
 tools.schemas.format(.anthropic); // includes claudeOnlySearch
 ```
 
+> **What `formats:` does NOT do:** it never sets a per-tool default output and never
+> blocks an encoding. `format(SchemaFormat)` is always explicit and always derives the
+> requested envelope — `claudeOnlySearch.format(.gemini)` returns a valid Gemini shape.
+> The declared list is metadata consumed by the deprecated `encode(format:)` filter.
+
 ---
 
 ## Type Support

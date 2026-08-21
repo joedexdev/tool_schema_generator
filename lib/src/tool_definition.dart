@@ -116,6 +116,10 @@ class ToolDefinition extends MapView<String, Object?> {
   /// final gemini = getWeather.format(.gemini);
   /// final mcp    = getWeather.format(.mcp);
   /// ```
+  ///
+  /// [format] is deliberately required — there is no implicit OpenAI default.
+  /// The annotation's `formats:` list never preselects or restricts this
+  /// method; any [SchemaFormat] derives a valid envelope.
   JsonObject format(SchemaFormat format) => encode(format);
 
   /// Returns the provider-specific schema envelope for [format].
