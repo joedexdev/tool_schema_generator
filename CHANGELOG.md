@@ -8,6 +8,11 @@
 * **Dart Operators:** Added subscript `tools['name']`, union `toolsA + toolsB`, and callable execution `await tools(name, args)`.
 * **Collection Accessors:** Added `tools.definitions` and `tools.schemas` for clean functional Dart pipeline access.
 
+### Changed
+
+* Minimum Dart SDK raised from 3.10 to **3.11**.
+* Enabled `package:lints/recommended.yaml` and resolved all resulting analyzer findings.
+
 ### Deprecated
 
 * `toolRegistry.allSchemas` is deprecated in favor of `tools.schemas` or `tools.toOpenAiSchemas()`.

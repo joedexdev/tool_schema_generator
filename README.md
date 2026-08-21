@@ -39,10 +39,10 @@ No hand-written JSON. No duplicated schemas. One source of truth.
 
 ```yaml
 dependencies:
-  tool_schema_generator: ^1.0.0
+  tool_schema_generator: ^1.2.0
 
 dev_dependencies:
-  build_runner: ^2.4.0
+  build_runner: ^2.15.0
 ```
 
 ---
@@ -186,8 +186,8 @@ final tools = [
 
 // Single tool by name
 final justSearch = toolRegistry.encode(name: 'search').first;
-// or again as mentioned by  using the <FUNCTION_NAME>ToolSchema syntax 
-const  justSearch  = searchToolSchema;
+// or, using the generated constant for that function:
+const justSearchSchema = searchToolSchema;
 ```
 
 ### `toolRegistry.encoded`

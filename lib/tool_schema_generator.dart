@@ -5,7 +5,7 @@
 ///
 /// Add `tool_schema_generator` as a dependency and `build_runner` as a
 /// dev dependency, then run `dart run build_runner build` to generate the schemas.
-library tool_schema_generator;
+library;
 
 export 'src/annotations.dart';
 export 'src/tool_definition.dart';

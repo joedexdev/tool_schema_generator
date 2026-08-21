@@ -128,8 +128,10 @@ void main() {
         ),
       ]);
 
-      expect(expanded.contains('a'), isTrue);
-      expect(expanded.contains('b'), isTrue);
+      // Intentionally exercises the String-name overload of `contains`
+      // (documented 1.x behavior; superseded by `hasTool` in a future major).
+      expect(expanded.contains('a'), isTrue); // ignore: collection_methods_unrelated_type
+      expect(expanded.contains('b'), isTrue); // ignore: collection_methods_unrelated_type
       expect(await expanded.call('a', const {}), 'a');
       expect(await expanded.call('b', const {}), 'b');
     });
@@ -230,7 +232,10 @@ void main() {
 
       final registry = ToolRegistry([rawSchema]);
 
-      expect(registry.contains('raw_map_tool'), isTrue);
+      expect(
+        registry.contains('raw_map_tool'), // ignore: collection_methods_unrelated_type
+        isTrue,
+      );
       expect(registry['raw_map_tool']!.name, 'raw_map_tool');
 
       await expectLater(
@@ -298,8 +303,8 @@ void main() {
 
       final combined = reg1 + reg2;
       expect(combined.definitions.length, 2);
-      expect(combined.contains('a'), isTrue);
-      expect(combined.contains('b'), isTrue);
+      expect(combined.contains('a'), isTrue); // ignore: collection_methods_unrelated_type
+      expect(combined.contains('b'), isTrue); // ignore: collection_methods_unrelated_type
     });
   });
 }
