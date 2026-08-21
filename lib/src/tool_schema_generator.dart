@@ -88,14 +88,17 @@ class ToolSchemaGenerator extends Generator {
       toolsBuffer.writeln('  ),');
     }
 
-    buffer.writeln('/// The generated tool registry for this file.');
+    buffer.writeln('/// The generated tool collection for this file.');
     buffer.writeln(
-      '/// Use [toolRegistry.encode] to get provider-formatted schemas,',
+      '/// Use [tools.toGeminiSchemas()], [tools.toAnthropicSchemas()], or [tools.toOpenAiSchemas()]',
     );
-    buffer.writeln('/// and [toolRegistry.call] to dispatch model tool calls.');
-    buffer.writeln('final toolRegistry = _ToolRegistry([');
+    buffer.writeln('/// to pass schemas to your LLM, and [tools.call] to dispatch.');
+    buffer.writeln('final tools = _ToolRegistry([');
     buffer.write(toolsBuffer.toString());
     buffer.writeln(']);');
+    buffer.writeln();
+    buffer.writeln('/// Backwards-compatible alias for [tools].');
+    buffer.writeln('final toolRegistry = tools;');
     buffer.writeln();
 
     for (final src in dispatchEmitter.helperSources) {
@@ -114,6 +117,13 @@ class ToolSchemaGenerator extends Generator {
     buffer.writeln();
 
     final toolVarName = '${tool.element.name}ToolSchema';
+    if (tool.description.isNotEmpty) {
+      for (final line in tool.description.split('\n')) {
+        buffer.writeln(line.trim().isEmpty ? '///' : '/// $line');
+      }
+    } else {
+      buffer.writeln('/// JSON Schema for [${tool.element.name}].');
+    }
     buffer.writeln('const $toolVarName = <String, Object?>{');
     buffer.writeln("  'type': 'function',");
     buffer.writeln("  'function': <String, Object?>{");

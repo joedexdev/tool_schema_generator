@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'annotations.dart';
 import 'tool_definition.dart';
 import 'tool_exceptions.dart';
+import 'tool_schema_collection.dart';
 
 /// A JSON object passed to or produced by tool schema APIs.
 typedef JsonObject = Map<String, Object?>;
@@ -15,30 +16,34 @@ typedef JsonArray = List<Object?>;
 /// [Future] that resolves to the tool function's return value.
 typedef ToolHandler = Future<Object?> Function(JsonObject args);
 
-/// A registry that maps tool names to their [ToolDefinition]s, providing
-/// a unified dispatch + discovery layer between the LLM and your Dart code.
+/// A collection and dispatch registry of [ToolDefinition]s, providing
+/// a unified multi-format discovery and execution layer between LLMs and Dart code.
 ///
 /// The generated subclass (from `tool_schema_generator`) extends this class
 /// and adds a strongly-typed getter per tool:
 ///
 /// ```dart
 /// // Generated in tools.g.dart — do not write this manually
-/// final toolRegistry = _ToolRegistry([ toolDefinitions ]);
+/// final tools = _ToolRegistry([ toolDefinitions ]);
+/// final toolRegistry = tools; // backwards-compatible alias
 /// ```
 ///
 /// ## Usage
 ///
 /// ```dart
-/// import 'tools.dart'; // exposes `toolRegistry`
+/// import 'tools.dart'; // exposes `tools`
 ///
-/// // ── Build the LLM request ─────────────────────────────────
-/// llm.generate(tools: toolRegistry.allSchemas);
+/// // ── Build the LLM request for any provider ─────────────────
+/// llm.generate(tools: tools.toGeminiSchemas());      // Gemini FunctionDeclarations
+/// llm.generate(tools: tools.toAnthropicSchemas());   // Anthropic tool shapes
+/// llm.generate(tools: tools.toOpenAiSchemas());      // OpenAI function shapes
+/// llm.generate(tools: tools.toMcpSchemas());         // MCP shapes
 ///
 /// // ── Or select specific tool schemas by Dart name ──────────
-/// llm.generate(tools: [toolRegistry.getWeather]);  // generated getter
+/// llm.generate(tools: [tools.getWeather.schema.toGemini()]);
 ///
 /// // ── Handle the response ───────────────────────────────────
-/// final value = await toolRegistry.call(call.name, call.arguments);
+/// final value = await tools(call.name, call.arguments);
 /// sendToModel(value.toString());
 /// ```
 class ToolRegistry extends IterableBase<JsonObject> {
@@ -83,6 +88,32 @@ class ToolRegistry extends IterableBase<JsonObject> {
     }
     return _tools.values.contains(element);
   }
+
+  /// All registered [ToolDefinition] objects.
+  Iterable<ToolDefinition> get definitions => _tools.values;
+
+  /// A collection of all registered tool schemas with batch formatters.
+  ToolSchemaCollection get schemas => ToolSchemaCollection(_tools.values);
+
+  /// Formats all registered tools for Google Gemini FunctionDeclaration.
+  List<JsonObject> toGeminiSchemas() => schemas.toGemini();
+
+  /// Formats all registered tools for Anthropic Claude.
+  List<JsonObject> toAnthropicSchemas() => schemas.toAnthropic();
+
+  /// Formats all registered tools for OpenAI.
+  List<JsonObject> toOpenAiSchemas() => schemas.toOpenAi();
+
+  /// Formats all registered tools for Model Context Protocol (MCP).
+  List<JsonObject> toMcpSchemas() => schemas.toMcp();
+
+  /// Deprecated alias for [schemas] or [toOpenAiSchemas].
+  @Deprecated('Use `tools.schemas` or `tools.toOpenAiSchemas()` instead.')
+  List<JsonObject> get allSchemas => schemas.raw;
+
+  /// Combines two registries into a new [ToolRegistry].
+  ToolRegistry operator +(ToolRegistry other) =>
+      ToolRegistry([...definitions, ...other.definitions]);
 
   /// All registered tool names.
   Iterable<String> get toolNames => _tools.keys;

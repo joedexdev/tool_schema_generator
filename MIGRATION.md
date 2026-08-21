@@ -1,6 +1,39 @@
 # Migration Guide
 
-This guide covers upgrading from `0.4.x` to `1.0.0`.
+## Upgrading to 1.2.0
+
+Version 1.2.0 introduces the idiomatic Dart `tools` collection and direct provider schema serializers without breaking existing code.
+
+### 1. Using the `tools` collection instead of `toolRegistry`
+Generated files now emit `final tools = _ToolRegistry([...]);` and preserve `final toolRegistry = tools;` for backwards compatibility.
+
+**Before:**
+```dart
+final response = await llm.generate(tools: toolRegistry.encode());
+final result = await toolRegistry.call(call.name, call.arguments);
+```
+
+**After (Idiomatic Dart):**
+```dart
+// Multi-provider schema getters
+final geminiTools   = tools.toGeminiSchemas();
+final claudeTools   = tools.toAnthropicSchemas();
+final openAiTools   = tools.toOpenAiSchemas();
+final mcpTools      = tools.toMcpSchemas();
+
+// Clean callable execution
+final result = await tools(call.name, call.arguments);
+
+// Individual tool schemas
+final schema = tools.getWeather.schema.toGemini();
+```
+
+### 2. Upgrading from `allSchemas`
+`toolRegistry.allSchemas` is now marked `@Deprecated`. Use `tools.schemas` (or `tools.toOpenAiSchemas()`) instead.
+
+---
+
+## Upgrading from `0.4.x` to `1.0.0`
 
 The 1.0 release keeps the package focused on the same workflow:
 

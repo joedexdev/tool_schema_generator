@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'annotations.dart';
 import 'tool_registry.dart';
+import 'tool_schema.dart';
 
 /// A single tool: its identity, parameter schema, and execution handler.
 ///
@@ -92,6 +93,12 @@ class ToolDefinition extends MapView<String, Object?> {
     return schema['strict'] == true;
   }
 
+  /// Dedicated schema wrapper for formatting and parameter inspection.
+  ToolSchema get schema => ToolSchema(this);
+
+  /// Invokes the tool handler directly.
+  Future<Object?> call(JsonObject args) => handler(args);
+
   /// Returns the provider-specific schema envelope for [format].
   ///
   /// Every tool supports every format by derivation — there is no
@@ -111,4 +118,16 @@ class ToolDefinition extends MapView<String, Object?> {
           'parameters': parametersSchema,
         },
       };
+
+  /// Formats this tool's schema for Google Gemini.
+  JsonObject toGeminiSchema() => encode(SchemaFormat.gemini);
+
+  /// Formats this tool's schema for Anthropic Claude.
+  JsonObject toAnthropicSchema() => encode(SchemaFormat.anthropic);
+
+  /// Formats this tool's schema for OpenAI.
+  JsonObject toOpenAiSchema() => encode(SchemaFormat.openAi);
+
+  /// Formats this tool's schema for Model Context Protocol (MCP).
+  JsonObject toMcpSchema() => schema.toMcp();
 }

@@ -42,7 +42,8 @@ void main() {
               // Dispatcher — subclass
               contains("final class _ToolRegistry extends ToolRegistry"),
               contains("ToolDefinition get doNothing => this['doNothing']!;"),
-              contains("final toolRegistry = _ToolRegistry("),
+              contains("final tools = _ToolRegistry(["),
+              contains("final toolRegistry = tools;"),
             ]),
           ),
         },
@@ -1218,7 +1219,8 @@ void main() {
               // Named getter on subclass
               contains("ToolDefinition get compute => this['compute']!;"),
               // Registry constructed with _ToolRegistry
-              contains("final toolRegistry = _ToolRegistry("),
+              contains("final tools = _ToolRegistry(["),
+              contains("final toolRegistry = tools;"),
               // Handlers map
               contains("handler: (JsonObject args) async"),
               contains("return compute("),

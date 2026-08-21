@@ -1,7 +1,33 @@
+## 1.2.0
+
+### Added
+
+* **Idiomatic `tools` Collection:** Generated files now emit `final tools = _ToolRegistry([...])` with a non-breaking `final toolRegistry = tools;` alias.
+* **Provider-Specific Schema Getters:** Added `tools.toGeminiSchemas()`, `tools.toAnthropicSchemas()`, `tools.toOpenAiSchemas()`, and `tools.toMcpSchemas()`.
+* **Dedicated `ToolSchema` & `ToolSchemaCollection`:** Strongly typed schema wrapper supporting `tool.schema.format()`, `tool.schema.toGemini()`, `tool.schema.toAnthropic()`, `tool.schema.toMcp()`, and `tool.schema.parameters`.
+* **Dart Operators:** Added subscript `tools['name']`, union `toolsA + toolsB`, and callable execution `await tools(name, args)`.
+* **Collection Accessors:** Added `tools.definitions` and `tools.schemas` for clean functional Dart pipeline access.
+
+### Deprecated
+
+* `toolRegistry.allSchemas` is deprecated in favor of `tools.schemas` or `tools.toOpenAiSchemas()`.
+
+---
+
+## 1.1.0
+
+This release improves the generated Dart source ergonomics around direct schema constants.
+
+### Added
+
+* Generated `<functionName>ToolSchema` constants now include Dart doc comments from the tool's effective description, so IDE hover explains what each schema does without opening the generated map.
+* The generated doc comment respects `@Tool(description:)` overrides and preserves multiline function doc comments.
+
+---
+
 ## 1.0.0
 
-Stable 1.0 release. This keeps the `1.0.0-dev1` architecture and strict-mode
-work intact, and adds the final hardening needed for the stable package.
+Stable 1.0 release with strict mode, schema IR, and provider-shaped generation.
 
 ### Added
 

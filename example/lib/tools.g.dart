@@ -22,6 +22,10 @@ const getWeatherParametersSchema = <String, Object?>{
   'required': <String>['city'],
 };
 
+/// Gets the current weather for a given city.
+///
+/// Returns temperature, humidity, and wind conditions
+/// for the requested location.
 const getWeatherToolSchema = <String, Object?>{
   'type': 'function',
   'function': <String, Object?>{
@@ -48,6 +52,7 @@ const searchProductsParametersSchema = <String, Object?>{
   'required': <String>['query', 'maxResults'],
 };
 
+/// Searches for products matching a query string.
 const searchProductsToolSchema = <String, Object?>{
   'type': 'function',
   'function': <String, Object?>{
@@ -82,6 +87,7 @@ const findNearbyPlacesParametersSchema = <String, Object?>{
   'required': <String>['location', 'radiusKm'],
 };
 
+/// Finds nearby places of interest based on geographic coordinates.
 const findNearbyPlacesToolSchema = <String, Object?>{
   'type': 'function',
   'function': <String, Object?>{
@@ -117,6 +123,7 @@ const sendEmailParametersSchema = <String, Object?>{
   'required': <String>['to', 'subject', 'body'],
 };
 
+/// Composes and sends an email message.
 const sendEmailToolSchema = <String, Object?>{
   'type': 'function',
   'function': <String, Object?>{
@@ -143,10 +150,10 @@ final class _ToolRegistry extends ToolRegistry {
   ToolDefinition get sendEmail => this['sendEmail']!;
 }
 
-/// The generated tool registry for this file.
-/// Use [toolRegistry.encode] to get provider-formatted schemas,
-/// and [toolRegistry.call] to dispatch model tool calls.
-final toolRegistry = _ToolRegistry([
+/// The generated tool collection for this file.
+/// Use [tools.toGeminiSchemas()], [tools.toAnthropicSchemas()], or [tools.toOpenAiSchemas()]
+/// to pass schemas to your LLM, and [tools.call] to dispatch.
+final tools = _ToolRegistry([
   ToolDefinition(
     name: 'getWeather',
     description:
@@ -223,6 +230,9 @@ final toolRegistry = _ToolRegistry([
     },
   ),
 ]);
+
+/// Backwards-compatible alias for [tools].
+final toolRegistry = tools;
 
 // ignore: unused_element
 T? _parseEnum<T extends Enum>(List<T> values, String? raw, String field) {

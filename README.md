@@ -104,24 +104,23 @@ Future<void> sendEmail(
 dart run build_runner build
 ```
 
-### 3. Use the generated registry
+### 3. Use the generated `tools` collection
 
 ```dart
 import 'tools.dart';
 
-// ── Encode schemas for your LLM ─────────────────────────────────────────────
-final response = await llm.generate(
+// ── Pass schemas to any LLM (Gemini, Claude, OpenAI, MCP) ───────────────────
+final response = await gemini.generate(
   prompt: 'Send an email to hello@example.com saying Hi!',
-  tools: toolRegistry.encode(),                         // OpenAI Schema (default)
-  /// or choose your specific tool to be included!  
-  /// the package generate the <FUNCTION_NAME>ToolSchema 
-  // tools: [sendEmailToolSchema] 
-  // tools: toolRegistry.encode(format: SchemaFormat.anthropic) // Anthropic
+  tools: tools.toGeminiSchemas(),                    // Gemini FunctionDeclarations
+  // tools: tools.toAnthropicSchemas(),              // Anthropic tool shapes
+  // tools: tools.toOpenAiSchemas(),                 // OpenAI function shapes (default)
+  // tools: tools.toMcpSchemas(),                    // Model Context Protocol shapes
 );
 
 // ── Dispatch the model's tool call ──────────────────────────────────────────
 for (final call in response.toolCalls) {
-  final value = await toolRegistry.call(call.name, call.arguments);
+  final value = await tools(call.name, call.arguments);
   print('Tool returned: $value');
 }
 ```
@@ -130,7 +129,41 @@ for (final call in response.toolCalls) {
 
 ## Core API
 
-### `toolRegistry.encode({String? name, SchemaFormat format})`
+### `tools` (or `toolRegistry`)
+
+The generated collection implements `Iterable<JsonObject>` / `Iterable<ToolDefinition>`:
+
+#### Multi-Format Schema Getters
+- **`tools.toGeminiSchemas()`** — All tools formatted as Gemini `FunctionDeclaration` objects.
+- **`tools.toAnthropicSchemas()`** — All tools formatted for Claude (`input_schema`).
+- **`tools.toOpenAiSchemas()`** — All tools formatted for OpenAI (standard Draft 2020-12 envelope).
+- **`tools.toMcpSchemas()`** — All tools formatted for Model Context Protocol (`inputSchema`).
+- **`tools.schemas`** — `ToolSchemaCollection` with batch formatting: `tools.schemas.toGemini()`, `tools.schemas.toAnthropic()`, `tools.schemas.toOpenAi()`.
+
+#### Individual Tool Schema Formatting
+Each generated getter (e.g. `tools.sendEmail`) returns a `ToolDefinition`:
+
+```dart
+// Format for specific providers
+tools.sendEmail.schema.toGemini();
+tools.sendEmail.schema.toAnthropic();
+tools.sendEmail.schema.toMcp();
+tools.sendEmail.schema.parameters; // Inner parameters schema only
+```
+
+#### Dynamic Filtering & Composition
+```dart
+// Filter tools dynamically:
+final publicGeminiTools = tools
+    .where((t) => !t.name.startsWith('admin_'))
+    .map((t) => t.schema.toGemini())
+    .toList();
+
+// Combine registries with operator +
+final fullSuite = coreTools + pluginTools;
+```
+
+#### `tools.encode({String? name, SchemaFormat format})`
 
 The unified encoding method. Always returns `List<JsonObject>`.
 

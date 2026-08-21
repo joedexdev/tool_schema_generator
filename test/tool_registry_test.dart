@@ -238,5 +238,68 @@ void main() {
         throwsA(isA<ToolExecutionException>()),
       );
     });
+
+    test('ToolRegistry definitions, schemas, and multi-format getters work', () {
+      final registry = ToolRegistry([
+        ToolDefinition(
+          name: 'getWeather',
+          description: 'Get weather',
+          parametersSchema: const {
+            'type': 'object',
+            'properties': {
+              'city': {'type': 'string'},
+            },
+          },
+          handler: (args) async => 'sunny',
+        ),
+      ]);
+
+      expect(registry.definitions.length, 1);
+      expect(registry.schemas.length, 1);
+
+      final geminiList = registry.toGeminiSchemas();
+      expect(geminiList.first['name'], 'getWeather');
+      expect(geminiList.first.containsKey('parameters'), isTrue);
+      expect(geminiList.first.containsKey('type'), isFalse);
+
+      final anthropicList = registry.toAnthropicSchemas();
+      expect(anthropicList.first['input_schema'], isNotNull);
+
+      final mcpList = registry.toMcpSchemas();
+      expect(mcpList.first['inputSchema'], isNotNull);
+
+      final openAiList = registry.toOpenAiSchemas();
+      expect(openAiList.first['type'], 'function');
+
+      final tool = registry['getWeather']!;
+      expect(tool.schema.toGemini()['name'], 'getWeather');
+      expect(tool.schema.toAnthropic()['name'], 'getWeather');
+      expect(tool.schema.toMcp()['name'], 'getWeather');
+      expect(tool.schema.parameters['type'], 'object');
+    });
+
+    test('operator + combines two registries', () {
+      final reg1 = ToolRegistry([
+        ToolDefinition(
+          name: 'a',
+          description: 'a',
+          parametersSchema: const {},
+          handler: (_) async => 'a',
+        ),
+      ]);
+      final reg2 = ToolRegistry([
+        ToolDefinition(
+          name: 'b',
+          description: 'b',
+          parametersSchema: const {},
+          handler: (_) async => 'b',
+        ),
+      ]);
+
+      final combined = reg1 + reg2;
+      expect(combined.definitions.length, 2);
+      expect(combined.contains('a'), isTrue);
+      expect(combined.contains('b'), isTrue);
+    });
   });
 }

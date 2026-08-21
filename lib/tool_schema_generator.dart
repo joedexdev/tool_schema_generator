@@ -11,3 +11,5 @@ export 'src/annotations.dart';
 export 'src/tool_definition.dart';
 export 'src/tool_exceptions.dart';
 export 'src/tool_registry.dart';
+export 'src/tool_schema.dart';
+export 'src/tool_schema_collection.dart';

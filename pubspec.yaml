@@ -1,6 +1,6 @@
 name: tool_schema_generator
 description: Generate provider-compatible LLM tool schemas and dispatchers from annotated Dart functions.
-version: 1.0.0
+version: 1.2.0
 repository: https://github.com/joedexdev/tool_schema_generator
 homepage: https://github.com/joedexdev/tool_schema_generator
 
