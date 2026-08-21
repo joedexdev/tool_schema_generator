@@ -126,6 +126,11 @@ class ToolDefinition extends MapView<String, Object?> {
           if (description.isNotEmpty) 'description': description,
           'parameters': parametersSchema,
         },
+        SchemaFormat.mcp => {
+          'name': name,
+          if (description.isNotEmpty) 'description': description,
+          'inputSchema': parametersSchema,
+        },
       };
 
   /// Formats this tool's schema for Google Gemini.
@@ -138,9 +143,5 @@ class ToolDefinition extends MapView<String, Object?> {
   JsonObject toOpenAiSchema() => encode(SchemaFormat.openAi);
 
   /// Formats this tool's schema for Model Context Protocol (MCP).
-  JsonObject toMcpSchema() => <String, Object?>{
-    'name': name,
-    if (description.isNotEmpty) 'description': description,
-    'inputSchema': parametersSchema,
-  };
+  JsonObject toMcpSchema() => encode(SchemaFormat.mcp);
 }

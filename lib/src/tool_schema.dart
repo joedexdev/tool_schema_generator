@@ -30,11 +30,7 @@ class ToolSchema {
   JsonObject toOpenAi() => _tool.encode(SchemaFormat.openAi);
 
   /// Formats the schema for Model Context Protocol (MCP).
-  JsonObject toMcp() => <String, Object?>{
-    'name': name,
-    if (description.isNotEmpty) 'description': description,
-    'inputSchema': parameters,
-  };
+  JsonObject toMcp() => _tool.encode(SchemaFormat.mcp);
 
   /// Raw OpenAI JSON representation.
   JsonObject toJson() => toOpenAi();

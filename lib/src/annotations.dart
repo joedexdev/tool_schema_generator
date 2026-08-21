@@ -10,6 +10,9 @@ enum SchemaFormat {
 
   /// Gemini function declaration shape.
   gemini,
+
+  /// Model Context Protocol (MCP) tool shape.
+  mcp,
 }
 
 /// Marks a top-level function as an LLM-callable tool.
@@ -47,7 +50,8 @@ class Tool {
 
   /// Provider schema formats generated for this tool.
   ///
-  /// By default, the generator emits all supported provider shapes.
+  /// By default, the generator emits all supported provider shapes,
+  /// including Model Context Protocol (MCP).
   final List<SchemaFormat> formats;
 
   /// Whether this tool should emit a strict parameter schema.
@@ -64,6 +68,7 @@ class Tool {
       SchemaFormat.openAi,
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
+      SchemaFormat.mcp,
     ],
     this.strict = false,
   });

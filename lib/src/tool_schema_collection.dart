@@ -37,8 +37,7 @@ class ToolSchemaCollection with IterableMixin<ToolSchema> {
   List<JsonObject> toOpenAi() => format(SchemaFormat.openAi);
 
   /// Formats all schemas for Model Context Protocol (MCP).
-  List<JsonObject> toMcp() =>
-      List.unmodifiable(_tools.map((t) => t.schema.toMcp()));
+  List<JsonObject> toMcp() => format(SchemaFormat.mcp);
 
   /// Raw OpenAI JSON schema maps.
   List<JsonObject> get raw => toOpenAi();

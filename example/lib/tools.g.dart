@@ -163,6 +163,7 @@ final tools = _ToolRegistry([
       SchemaFormat.openAi,
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
+      SchemaFormat.mcp,
     ],
     handler: (JsonObject args) async {
       return getWeather(
@@ -185,6 +186,7 @@ final tools = _ToolRegistry([
       SchemaFormat.openAi,
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
+      SchemaFormat.mcp,
     ],
     handler: (JsonObject args) async {
       return searchProducts(
@@ -206,6 +208,7 @@ final tools = _ToolRegistry([
       SchemaFormat.openAi,
       SchemaFormat.anthropic,
       SchemaFormat.gemini,
+      SchemaFormat.mcp,
     ],
     handler: (JsonObject args) async {
       return findNearbyPlaces(
