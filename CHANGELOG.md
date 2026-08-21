@@ -24,10 +24,6 @@
 * `toolDefinition.encode([format])` — use `toolDefinition.format(format)`. Removal in 2.0.
 * `toolRegistry.allSchemas` — use `tools.schemas.format(.openAi)`.
 
-### Removed (unreleased previews)
-
-* Provider-named getters that existed only in unreleased 1.2.0 previews were consolidated into `format(...)` before release: `toGeminiSchemas()`, `toAnthropicSchemas()`, `toOpenAiSchemas()`, `toMcpSchemas()`, `ToolSchema.toGemini()/toAnthropic()/toOpenAi()/toMcp()/toJson()/toMap()`, `ToolSchemaCollection.toGemini()/toAnthropic()/toOpenAi()/toMcp()/raw`, and `ToolDefinition.toXSchema()` variants. Nothing to migrate if you never ran a preview build.
-
 ---
 
 ## 1.1.0

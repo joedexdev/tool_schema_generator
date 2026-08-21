@@ -185,7 +185,7 @@ enum SchemaFormat {
 
 > ⚠️ Semver note: adding an enum constant breaks consumer code with *exhaustive* switches over
 > `SchemaFormat`. Accepted deliberately while 1.2.0 is unreleased; called out in CHANGELOG (§5.10)
-> and MIGRATION.md so downstream sees it before upgrading.
+> and the README migration section so downstream sees it before upgrading.
 
 **(b) tool_definition.dart** — `encode()`'s switch gains the fourth arm, becoming the single
 source of every wire shape (replaces the hand-built map previously delegated to `ToolSchema`):
@@ -293,7 +293,9 @@ restriction story = declare via `@Tool(formats:)`.
   `format(SchemaFormat.xxx)` / dot-shorthand `format(.gemini)`. Removal in 2.0.
 ```
 
-3. **MIGRATION.md** — append 1.1→1.2 section with the §5.8(b) mapping table.
+3. **README "Migrating to 1.2.0"** — latest-only migration section placed at the end of
+   README (before Contributing); MIGRATION.md deleted (owner decision: single, current
+   migration home).
 
 ---
 
@@ -303,7 +305,7 @@ restriction story = declare via `@Tool(formats:)`.
 |------|-----------|------------|
 | Generated `.g.dart` drifts in C3 | Low | Golden diff must be empty post-C3 build |
 | Generated output drifts in C4a/C4b | Expected | Diff limited to doc-comment lines — reviewed manually (§5.9.1) |
-| `SchemaFormat.mcp` breaks consumer exhaustive switches | Medium (by design) | CHANGELOG ⚠️ + MIGRATION.md entry; accepted pre-release |
+| `SchemaFormat.mcp` breaks consumer exhaustive switches | Medium (by design) | CHANGELOG ⚠️ + README migration entry; accepted pre-release |
 | MCP arm diverges from legacy hand-built map | Low | Key-by-key parity asserted in existing tests before/after C4a |
 | `late final schemas` semantics if registry ever mutable | Very low | Comment on field; revisit if mutation API added |
 | Re-export miss breaks `JsonObject` consumers | Low | Explicit `export 'json_types.dart';`; suite catches |

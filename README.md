@@ -47,35 +47,6 @@ dev_dependencies:
 
 ---
 
-## Migrating From 0.4.x
-
-See the full [migration guide](MIGRATION.md) for detailed before/after
-examples.
-
-For most projects, the upgrade is:
-
-- Rename `SchemaFlavor` to `SchemaFormat`.
-- Rename `flavors:` to `formats:` in `@Tool(...)` and `ToolDefinition(...)`.
-- Replace `toolRegistry.encodeAll(flavor)` with
-  `toolRegistry.encode(format: format)`.
-- Replace `toolRegistry.encode(name, flavor)` with
-  `toolRegistry.encode(name: name, format: format)`.
-- Treat every `encode(...)` result as `List<JsonObject>`; use `.first` when
-  you need one schema object.
-- Keep `@Tool()` on top-level functions. Invalid placements are now analyzer
-  and generator errors.
-- Regenerate generated files:
-
-```bash
-dart run build_runner build --delete-conflicting-outputs
-```
-
-Strict mode is opt-in with `@Tool(strict: true)`. In strict schemas, nullable
-Dart types render as JSON Schema unions such as
-`{"type": ["string", "null"]}`; non-strict schemas keep `"nullable": true`.
-
----
-
 ## Quick Start
 
 ### 1. Annotate your functions
@@ -355,6 +326,10 @@ All four share the same provider-agnostic JSON Schema for the parameters — onl
 tools.schemas.format(.openAi);     // or .anthropic / .gemini / .mcp
 ```
 
+> **No implicit default:** `format(...)` always requires an explicit `SchemaFormat` —
+> nothing silently assumes OpenAI. The only defaulted member is the deprecated
+> `ToolDefinition.encode([format])` shim (defaults to `openAi`).
+
 When `@Tool(strict: true)` is used, OpenAI and Anthropic encodings also include
 their strict flag. The canonical parameter schema remains provider-neutral.
 
@@ -580,6 +555,52 @@ future schema work much safer:
 - Clearer build-time diagnostics for unsupported strict-mode shapes.
 - Easier evolution of provider envelopes while keeping one canonical parameter
   schema.
+
+---
+
+## Migrating to 1.2.0
+
+1.2.0 introduces the idiomatic `tools` collection, `SchemaFormat.mcp`, and a single
+canonical encoding path: `format(SchemaFormat)` — reading naturally with Dart's enum
+dot-shorthand (`format(.gemini)`) on SDK ≥3.10.
+
+### From `toolRegistry` to `tools`
+Generated files now emit `final tools = _ToolRegistry([...]);` and keep
+`final toolRegistry = tools;` as a backwards-compatible alias.
+
+```dart
+// Before (1.1.x)
+final response = await llm.generate(tools: toolRegistry.encode());
+// After
+final response = await llm.generate(tools: tools.schemas.format(.openAi));
+```
+
+### Encoding cheat sheet
+
+| Task | 1.2.0 |
+|---|---|
+| All tools → any provider | `tools.schemas.format(.gemini)` / `.anthropic` / `.openAi` / `.mcp` |
+| One tool → any provider | `tools['getWeather']!.format(.gemini)` |
+| Parameters schema only | `tools.getWeather.schema.parameters` |
+| Runtime name check | `tools.hasTool('getWeather')` |
+
+### Deprecated (removed in 2.0)
+
+| Shipped ≤1.1.0 | Replacement |
+|---|---|
+| `toolRegistry.encode()` / `.encoded` | `tools.schemas.format(.openAi)` |
+| `toolRegistry.encode(format: f)` | `tools.schemas.format(f)` |
+| `toolRegistry.encode(name: 'x', ...)` | `tools['x']!.format(...)` |
+| `toolRegistry.allSchemas` | `tools.schemas.format(.openAi)` |
+| `toolDefinition.encode([f])` | `toolDefinition.format(f)` |
+
+Note: deprecated `registry.encode(format:)` is the only path that filters by each tool's
+declared `formats:` list; `schemas.format(...)` formats every registered definition.
+
+### ⚠️ `SchemaFormat.mcp`
+
+Adding an enum constant breaks exhaustive `switch` statements over `SchemaFormat`;
+add a `case SchemaFormat.mcp:` (or default) when upgrading. Minimum SDK is now **3.11**.
 
 ---
 
