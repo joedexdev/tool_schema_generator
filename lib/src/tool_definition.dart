@@ -110,8 +110,19 @@ class ToolDefinition extends MapView<String, Object?> {
 
   /// Returns the provider-specific schema envelope for [format].
   ///
+  /// The single canonical encoding path:
+  ///
+  /// ```dart
+  /// final gemini = getWeather.format(.gemini);
+  /// final mcp    = getWeather.format(.mcp);
+  /// ```
+  JsonObject format(SchemaFormat format) => encode(format);
+
+  /// Returns the provider-specific schema envelope for [format].
+  ///
   /// Every tool supports every format by derivation — there is no
   /// map for a format to be absent from.
+  @Deprecated('Use format(SchemaFormat) — e.g. format(.gemini).')
   JsonObject encode([SchemaFormat format = SchemaFormat.openAi]) =>
       switch (format) {
         SchemaFormat.openAi => Map<String, Object?>.unmodifiable(this),
@@ -132,16 +143,4 @@ class ToolDefinition extends MapView<String, Object?> {
           'inputSchema': parametersSchema,
         },
       };
-
-  /// Formats this tool's schema for Google Gemini.
-  JsonObject toGeminiSchema() => encode(SchemaFormat.gemini);
-
-  /// Formats this tool's schema for Anthropic Claude.
-  JsonObject toAnthropicSchema() => encode(SchemaFormat.anthropic);
-
-  /// Formats this tool's schema for OpenAI.
-  JsonObject toOpenAiSchema() => encode(SchemaFormat.openAi);
-
-  /// Formats this tool's schema for Model Context Protocol (MCP).
-  JsonObject toMcpSchema() => encode(SchemaFormat.mcp);
 }

@@ -151,7 +151,7 @@ final class _ToolRegistry extends ToolRegistry {
 }
 
 /// The generated tool collection for this file.
-/// Use [tools.toGeminiSchemas()], [tools.toAnthropicSchemas()], or [tools.toOpenAiSchemas()]
+/// Use [tools.schemas.format] (e.g. `tools.schemas.format(.gemini)`)
 /// to pass schemas to your LLM, and [tools.call] to dispatch.
 final tools = _ToolRegistry([
   ToolDefinition(

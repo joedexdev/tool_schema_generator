@@ -2,7 +2,13 @@
 
 ## Upgrading to 1.2.0
 
-Version 1.2.0 introduces the idiomatic Dart `tools` collection and direct provider schema serializers without breaking existing code.
+Version 1.2.0 introduces the idiomatic Dart `tools` collection, the `SchemaFormat.mcp`
+provider, and a single canonical encoding path: `format(SchemaFormat)` — which reads
+naturally with Dart's enum dot-shorthand (`format(.gemini)`) on SDK ≥3.10.
+
+> **Note:** provider-named helpers such as `tools.toGeminiSchemas()` appeared only in
+> unreleased 1.2.0 previews and were **removed before release** — nothing to migrate;
+> use `format(...)` as shown below.
 
 ### 1. Using the `tools` collection instead of `toolRegistry`
 Generated files now emit `final tools = _ToolRegistry([...]);` and preserve `final toolRegistry = tools;` for backwards compatibility.
@@ -15,21 +21,45 @@ final result = await toolRegistry.call(call.name, call.arguments);
 
 **After (Idiomatic Dart):**
 ```dart
-// Multi-provider schema getters
-final geminiTools   = tools.toGeminiSchemas();
-final claudeTools   = tools.toAnthropicSchemas();
-final openAiTools   = tools.toOpenAiSchemas();
-final mcpTools      = tools.toMcpSchemas();
+// One batch formatter for every provider
+final geminiTools = tools.schemas.format(.gemini);
+final claudeTools = tools.schemas.format(.anthropic);
+final openAiTools = tools.schemas.format(.openAi);
+final mcpTools    = tools.schemas.format(.mcp);
 
 // Clean callable execution
 final result = await tools(call.name, call.arguments);
 
 // Individual tool schemas
-final schema = tools.getWeather.schema.toGemini();
+final schema = tools.getWeather.format(.gemini);
 ```
 
-### 2. Upgrading from `allSchemas`
-`toolRegistry.allSchemas` is now marked `@Deprecated`. Use `tools.schemas` (or `tools.toOpenAiSchemas()`) instead.
+### 2. Upgrading from shipped encode helpers
+
+| Shipped ≤1.1.0 (deprecated in 1.2.0) | Replacement |
+|---|---|
+| `toolRegistry.encode()` | `tools.schemas.format(.openAi)` |
+| `toolRegistry.encode(format: f)` | `tools.schemas.format(f)` |
+| `toolRegistry.encode(name: 'x')` | `tools['x']!.format(.openAi)` |
+| `toolRegistry.encode(name: 'x', format: f)` | `tools['x']!.format(f)` |
+| `toolRegistry.encoded` | `tools.schemas.format(.openAi)` |
+| `toolRegistry.allSchemas` | `tools.schemas.format(.openAi)` |
+| `toolDefinition.encode([f])` | `toolDefinition.format(f)` |
+
+Deprecated members keep working through 1.x and will be removed in 2.0.
+`ToolRegistry.encode(name:)` remains the only path that filters by each tool's declared
+`formats:` list; prefer `@Tool(formats:)` + `schemas.format` for provider restriction.
+
+### 3. New: MCP as a first-class format
+`SchemaFormat.mcp` produces the MCP tool shape (`name`, `description`, `inputSchema`)
+through the same encoder as every other provider:
+
+```dart
+llm.generate(tools: tools.schemas.format(.mcp));
+```
+
+⚠️ Adding an enum constant breaks exhaustive `switch` statements over `SchemaFormat`;
+add a `case SchemaFormat.mcp:` (or default) when upgrading.
 
 ---
 

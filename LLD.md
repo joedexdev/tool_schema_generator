@@ -226,57 +226,38 @@ hand-built implementations (verified by existing tests + golden run). Drop the n
 | `ToolSchemaCollection.toMcp()` body | `=> format(SchemaFormat.mcp);` |
 | `ToolRegistry.toMcpSchemas()` body | unchanged (already routes through `schemas`) |
 
-### 5.8 — Canonical `format()` + deprecation sweep (C4b)
+### 5.8 — Canonical `format()` + surface consolidation (C4b) — REV 3: removal, not deprecation
 
-**(a) New canonical member on `ToolDefinition`** (required-positional, matching siblings;
-explicit > defaulted):
+**Owner decision:** every `.toX` variant was introduced by *unreleased* 1.2.0 previews —
+deprecation ceremony without value. They are **removed outright**, so no release ever ships them.
+Only members that shipped in ≤1.1.0 (verified against baseline `4c7d47e`) carry `@Deprecated`.
 
-```dart
-/// Returns the provider-specific schema envelope for [format].
-JsonObject format(SchemaFormat format) => encode(format);
-```
+**(a) Canonical members added:** `ToolDefinition.format(SchemaFormat)` (required-positional,
+matching siblings), `ToolRegistry.hasTool(String)`.
 
-**(b) Deprecation matrix** — annotate existing members; bodies untouched except where noted.
-Messages use dot-shorthand examples to teach the new idiom:
+**(b) REMOVED (never published):**
 
-| Class | Member | `@Deprecated` replacement text |
-|-------|---------------------------------------|
-| `ToolDefinition` | `encode([f])` | `Use format(SchemaFormat) — e.g. format(.gemini).` |
-| `ToolDefinition` | `toOpenAiSchema()` | `Use format(.openAi).` |
-| `ToolDefinition` | `toGeminiSchema()` | `Use format(.gemini).` |
-| `ToolDefinition` | `toAnthropicSchema()` | `Use format(.anthropic).` |
-| `ToolDefinition` | `toMcpSchema()` | `Use format(.mcp).` |
-| `ToolSchema` | `toOpenAi()` | `Use format(.openAi).` |
-| `ToolSchema` | `toGemini()` | `Use format(.gemini).` |
-| `ToolSchema` | `toAnthropic()` | `Use format(.anthropic).` |
-| `ToolSchema` | `toMcp()` | `Use format(.mcp).` |
-| `ToolSchema` | `toJson()` / `toMap()` | `Use format(.openAi).` *(both were identical dupes)* |
-| `ToolSchemaCollection` | `toGemini()` | `Use format(.gemini).` |
-| `ToolSchemaCollection` | `toAnthropic()` | `Use format(.anthropic).` |
-| `ToolSchemaCollection` | `toOpenAi()` | `Use format(.openAi).` |
-| `ToolSchemaCollection` | `toMcp()` | `Use format(.mcp).` |
-| `ToolSchemaCollection` | `raw` | `Use format(.openAi).` |
-| `ToolRegistry` | `encode({name, format})` | `Use tools[name].format(...) for one tool or tools.schemas.format(...) for all.` |
-| `ToolRegistry` | `encoded` | `Use tools.schemas.format(.openAi).` |
-| `ToolRegistry` | `toOpenAiSchemas()` | `Use tools.schemas.format(.openAi).` |
-| `ToolRegistry` | `toGeminiSchemas()` | `Use tools.schemas.format(.gemini).` |
-| `ToolRegistry` | `toAnthropicSchemas()` | `Use tools.schemas.format(.anthropic).` |
-| `ToolRegistry` | `toMcpSchemas()` | `Use tools.schemas.format(.mcp).` |
-| `ToolRegistry` | `allSchemas` (already dep.) | update message → `Use tools.schemas.format(.openAi).` |
+| Class | Removed members |
+|-------|-----------------|
+| `ToolRegistry` | `toGeminiSchemas()`, `toAnthropicSchemas()`, `toOpenAiSchemas()`, `toMcpSchemas()` |
+| `ToolDefinition` | `toGeminiSchema()`, `toAnthropicSchema()`, `toOpenAiSchema()`, `toMcpSchema()` |
+| `ToolSchema` | `toGemini()`, `toAnthropic()`, `toOpenAi()`, `toMcp()`, `toJson()`, `toMap()` |
+| `ToolSchemaCollection` | `toGemini()`, `toAnthropic()`, `toOpenAi()`, `toMcp()`, `raw` |
 
-Same-library deprecation references are analyzer-exempt, so internal delegations between
-deprecated members stay warning-free.
+**(c) DEPRECATED (shipped ≤1.1.0; bodies intact until 2.0):**
 
-**(c) Addition:**
+| Member | `@Deprecated` replacement text |
+|--------|-------------------------------|
+| `ToolRegistry.encode({name, format})` | `Use tools[name].format(...) for a single tool or tools.schemas.format(...) for all tools.` — doc notes it remains the only formats-filtering path |
+| `ToolRegistry.encoded` | `Use tools.schemas.format(.openAi).` |
+| `ToolRegistry.allSchemas` | message updated → `Use tools.schemas.format(.openAi) instead.` |
+| `ToolDefinition.encode([f])` | `Use format(SchemaFormat) — e.g. format(.gemini).` |
 
-```dart
-/// Whether a tool is registered under [name].
-///
-/// Prefer over [contains], which follows [Iterable] semantics.
-bool hasTool(String name) => _tools.containsKey(name);
-```
+Same-library deprecation references are analyzer-exempt (`format()` delegates to `encode()`).
 
-Adjacent to `operator []` (tool_registry.dart:122). `contains()` itself unchanged for 1.x.
+**(d) Behavioral note:** `schemas.format(...)` does **not** filter by each tool's declared
+`formats:` list (deprecated `registry.encode(format:)` does). Documented in README + dartdoc;
+restriction story = declare via `@Tool(formats:)`.
 
 ### 5.9 — Generated-code & internal doc updates (C4b)
 

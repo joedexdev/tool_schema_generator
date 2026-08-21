@@ -14,7 +14,7 @@ When building LLM agents, every provider (OpenAI, Anthropic, Gemini) expects a d
 
 1. **Annotate** your Dart functions with `@Tool()`.
 2. **Generate** — `build_runner` produces a `toolRegistry` with provider-shaped schemas and a validated dispatcher.
-3. **Use** — pass `toolRegistry.encode()` to your LLM and call `toolRegistry.call(name, args)` when it responds.
+3. **Use** — pass `tools.schemas.format(.gemini)` to your LLM and call `tools(name, args)` when it responds.
 
 No hand-written JSON. No duplicated schemas. One source of truth.
 
@@ -23,8 +23,8 @@ No hand-written JSON. No duplicated schemas. One source of truth.
 ## Features
 
 - **Zero boilerplate** — names, types, nullability, and doc comments are all inferred from Dart syntax.
-- **Multi-provider encoding** — one annotation, three provider shapes: OpenAI, Anthropic, and Gemini.
-- **Unified encode API** — `encode()` always returns `List<JsonObject>`, making spreads, LLM calls, and per-tool access consistent.
+- **Multi-provider encoding** — one annotation, four provider shapes: OpenAI, Anthropic, Gemini, and MCP.
+- **One encoding verb** — `format(SchemaFormat)` everywhere, reading naturally with Dart's enum dot-shorthand: `tools.schemas.format(.gemini)`.
 - **Provider-agnostic strict mode** — opt into closed, fully-required schemas with `@Tool(strict: true)`.
 - **Type-safe dispatch** — the generated registry validates every argument and routes calls to the right Dart closure.
 - **Raw JSON as a first-class citizen** — hand-written `Map<String, Object?>` schemas can be passed directly to `ToolRegistry`; no wrapper required.
@@ -112,10 +112,10 @@ import 'tools.dart';
 // ── Pass schemas to any LLM (Gemini, Claude, OpenAI, MCP) ───────────────────
 final response = await gemini.generate(
   prompt: 'Send an email to hello@example.com saying Hi!',
-  tools: tools.toGeminiSchemas(),                    // Gemini FunctionDeclarations
-  // tools: tools.toAnthropicSchemas(),              // Anthropic tool shapes
-  // tools: tools.toOpenAiSchemas(),                 // OpenAI function shapes (default)
-  // tools: tools.toMcpSchemas(),                    // Model Context Protocol shapes
+  tools: tools.schemas.format(.gemini),               // Gemini FunctionDeclarations
+  // tools: tools.schemas.format(.anthropic),         // Anthropic tool shapes
+  // tools: tools.schemas.format(.openAi),            // OpenAI function shapes
+  // tools: tools.schemas.format(.mcp),               // Model Context Protocol shapes
 );
 
 // ── Dispatch the model's tool call ──────────────────────────────────────────
@@ -133,21 +133,28 @@ for (final call in response.toolCalls) {
 
 The generated collection implements `Iterable<JsonObject>` / `Iterable<ToolDefinition>`:
 
-#### Multi-Format Schema Getters
-- **`tools.toGeminiSchemas()`** — All tools formatted as Gemini `FunctionDeclaration` objects.
-- **`tools.toAnthropicSchemas()`** — All tools formatted for Claude (`input_schema`).
-- **`tools.toOpenAiSchemas()`** — All tools formatted for OpenAI (standard Draft 2020-12 envelope).
-- **`tools.toMcpSchemas()`** — All tools formatted for Model Context Protocol (`inputSchema`).
-- **`tools.schemas`** — `ToolSchemaCollection` with batch formatting: `tools.schemas.toGemini()`, `tools.schemas.toAnthropic()`, `tools.schemas.toOpenAi()`.
+#### Multi-Format Schema Encoding
+
+One canonical batch formatter covers every provider — including MCP:
+
+```dart
+tools.schemas.format(.gemini);     // All tools as Gemini FunctionDeclarations
+tools.schemas.format(.anthropic);  // All tools for Claude (`input_schema`)
+tools.schemas.format(.openAi);     // All tools, OpenAI Draft 2020-12 envelope
+tools.schemas.format(.mcp);        // All tools for Model Context Protocol
+```
+
+Results are memoized per format; `tools.schemas` is itself cached on the registry.
 
 #### Individual Tool Schema Formatting
-Each generated getter (e.g. `tools.sendEmail`) returns a `ToolDefinition`:
+Each generated getter (e.g. `tools.sendEmail`) returns a `ToolDefinition` with the same
+canonical `format(...)` verb:
 
 ```dart
 // Format for specific providers
-tools.sendEmail.schema.toGemini();
-tools.sendEmail.schema.toAnthropic();
-tools.sendEmail.schema.toMcp();
+tools.sendEmail.format(.gemini);
+tools.sendEmail.format(.anthropic);
+tools.sendEmail.format(.mcp);
 tools.sendEmail.schema.parameters; // Inner parameters schema only
 ```
 
@@ -156,50 +163,48 @@ tools.sendEmail.schema.parameters; // Inner parameters schema only
 // Filter tools dynamically:
 final publicGeminiTools = tools
     .where((t) => !t.name.startsWith('admin_'))
-    .map((t) => t.schema.toGemini())
+    .map((t) => t.format(.gemini))
     .toList();
 
 // Combine registries with operator +
 final fullSuite = coreTools + pluginTools;
 ```
 
-#### `tools.encode({String? name, SchemaFormat format})`
+#### Legacy `toolRegistry.encode({String? name, SchemaFormat format})` (deprecated)
 
-The unified encoding method. Always returns `List<JsonObject>`.
+The pre-1.2 encoding method still works but is deprecated in favor of the paths above.
+Unlike `schemas.format`, it filters by each tool's declared `formats:` list.
 
 | Call | Returns |
 |---|---|
 | `encode()` | All tools, OpenAI format |
 | `encode(format: SchemaFormat.gemini)` | All tools, Gemini format |
-| `encode(format: SchemaFormat.anthropic)` | All tools, Anthropic format |
 | `encode(name: 'search')` | 1-element list, that tool, OpenAI format |
 | `encode(name: 'search', format: SchemaFormat.anthropic)` | 1-element list, that tool, Anthropic format |
 
-Because the return type is always `List<JsonObject>`, you can spread with extra tools, pass directly to any LLM client, or concatenate registries:
-
 ```dart
 // Spread a hand-crafted tool alongside generated ones
-final tools = [
-  ...toolRegistry.encode(format: SchemaFormat.openAi),
+final allTools = [
+  ...toolRegistry.encode(), // prefer tools.schemas.format(.openAi)
   thinkTool, // a raw JsonObject
 ];
 
 // Single tool by name
-final justSearch = toolRegistry.encode(name: 'search').first;
+final justSearch = toolRegistry['search']!.format(.openAi);
 // or, using the generated constant for that function:
 const justSearchSchema = searchToolSchema;
 ```
 
-### `toolRegistry.encoded`
+### `toolRegistry.encoded` (deprecated)
 
-A convenience getter equivalent to `encode()` — all tools, OpenAI format.
+Convenience getter equivalent to `encode()` — use `tools.schemas.format(.openAi)` instead.
 
 ### Named getters
 
 The generated subclass exposes a strongly-typed getter per tool, returning a `ToolDefinition` (which is itself a `Map<String, Object?>`):
 
 ```dart
-// Equivalent to toolRegistry.encode(name: 'sendEmail').first
+// Equivalent to toolRegistry['sendEmail']!.format(.openAi)
 final schema = toolRegistry.sendEmail; // ToolDefinition (OpenAI shape)
 ```
 
@@ -246,10 +251,11 @@ reported by the analyzer and by the generator.
   name: 'custom_name',          // optional — defaults to Dart function name
   description: 'Override ...',  // optional — defaults to doc comment
   strict: true,                 // optional — defaults to false
-  formats: [                    // optional — defaults to all three
+  formats: [                    // optional — defaults to all four
     SchemaFormat.openAi,
     SchemaFormat.anthropic,
     SchemaFormat.gemini,
+    SchemaFormat.mcp,
   ],
 )
 ```
@@ -338,11 +344,16 @@ tool needs strict behavior.
 
 | `SchemaFormat` | Envelope shape |
 |---|---|
-| `openAi` (default) | `{"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}` |
+| `openAi` | `{"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}` |
 | `anthropic` | `{"name": ..., "description": ..., "input_schema": ...}` |
 | `gemini` | `{"name": ..., "description": ..., "parameters": ...}` |
+| `mcp` | `{"name": ..., "description": ..., "inputSchema": ...}` |
 
-All three share the same provider-agnostic JSON Schema for the parameters — only the outer envelope changes.
+All four share the same provider-agnostic JSON Schema for the parameters — only the outer envelope changes. Encode any of them with one verb:
+
+```dart
+tools.schemas.format(.openAi);     // or .anthropic / .gemini / .mcp
+```
 
 When `@Tool(strict: true)` is used, OpenAI and Anthropic encodings also include
 their strict flag. The canonical parameter schema remains provider-neutral.
@@ -354,9 +365,12 @@ their strict flag. The canonical parameter schema remains provider-neutral.
 @Tool(formats: [SchemaFormat.anthropic])
 Future<String> claudeOnlySearch(String query) async => '...';
 
-// When you call encode(format: SchemaFormat.openAi), this tool is excluded
+// toolRegistry.encode(format:) (deprecated) filters by the declared formats list:
 toolRegistry.encode(format: SchemaFormat.openAi); // does not include claudeOnlySearch
 toolRegistry.encode(format: SchemaFormat.anthropic); // includes it
+
+// schemas.format(...) always formats every registered definition:
+tools.schemas.format(.anthropic); // includes claudeOnlySearch
 ```
 
 ---
@@ -500,9 +514,10 @@ ToolDefinition
       openAi     → Map.unmodifiable(this)          // re-uses the stored map
       anthropic  → {"name", "description", "input_schema": parametersSchema}
       gemini     → {"name", "description", "parameters": parametersSchema}
+      mcp        → {"name", "description", "inputSchema": parametersSchema}
 ```
 
-No pre-baked map per format. Provider shapes are derived lazily at encode time.
+No pre-baked map per format. Provider shapes are derived lazily at encode time — one switch is the single source of truth for every provider, including MCP.
 
 ### `ToolRegistry` extends `IterableBase<JsonObject>`
 

@@ -90,7 +90,7 @@ class ToolSchemaGenerator extends Generator {
 
     buffer.writeln('/// The generated tool collection for this file.');
     buffer.writeln(
-      '/// Use [tools.toGeminiSchemas()], [tools.toAnthropicSchemas()], or [tools.toOpenAiSchemas()]',
+      '/// Use [tools.schemas.format] (e.g. `tools.schemas.format(.gemini)`)',
     );
     buffer.writeln(
       '/// to pass schemas to your LLM, and [tools.call] to dispatch.',

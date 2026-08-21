@@ -25,13 +25,13 @@ export 'json_types.dart';
 /// import 'tools.dart'; // exposes `tools`
 ///
 /// // ── Build the LLM request for any provider ─────────────────
-/// llm.generate(tools: tools.toGeminiSchemas());      // Gemini FunctionDeclarations
-/// llm.generate(tools: tools.toAnthropicSchemas());   // Anthropic tool shapes
-/// llm.generate(tools: tools.toOpenAiSchemas());      // OpenAI function shapes
-/// llm.generate(tools: tools.toMcpSchemas());         // MCP shapes
+/// llm.generate(tools: tools.schemas.format(.gemini));    // Gemini FunctionDeclarations
+/// llm.generate(tools: tools.schemas.format(.anthropic)); // Anthropic tool shapes
+/// llm.generate(tools: tools.schemas.format(.openAi));    // OpenAI function shapes
+/// llm.generate(tools: tools.schemas.format(.mcp));       // Model Context Protocol shapes
 ///
 /// // ── Or select specific tool schemas by Dart name ──────────
-/// llm.generate(tools: [tools.getWeather.schema.toGemini()]);
+/// llm.generate(tools: [tools.getWeather.format(.gemini)]);
 ///
 /// // ── Handle the response ───────────────────────────────────
 /// final value = await tools(call.name, call.arguments);
@@ -89,21 +89,9 @@ class ToolRegistry extends IterableBase<JsonObject> {
   /// (and its per-format encodings) never go stale.
   late final ToolSchemaCollection schemas = ToolSchemaCollection(_tools.values);
 
-  /// Formats all registered tools for Google Gemini FunctionDeclaration.
-  List<JsonObject> toGeminiSchemas() => schemas.toGemini();
-
-  /// Formats all registered tools for Anthropic Claude.
-  List<JsonObject> toAnthropicSchemas() => schemas.toAnthropic();
-
-  /// Formats all registered tools for OpenAI.
-  List<JsonObject> toOpenAiSchemas() => schemas.toOpenAi();
-
-  /// Formats all registered tools for Model Context Protocol (MCP).
-  List<JsonObject> toMcpSchemas() => schemas.toMcp();
-
-  /// Deprecated alias for [schemas] or [toOpenAiSchemas].
-  @Deprecated('Use `tools.schemas` or `tools.toOpenAiSchemas()` instead.')
-  List<JsonObject> get allSchemas => schemas.raw;
+  /// Deprecated alias for [schemas].
+  @Deprecated('Use tools.schemas.format(.openAi) instead.')
+  List<JsonObject> get allSchemas => schemas.format(SchemaFormat.openAi);
 
   /// Combines two registries into a new [ToolRegistry].
   ToolRegistry operator +(ToolRegistry other) =>
@@ -115,6 +103,11 @@ class ToolRegistry extends IterableBase<JsonObject> {
   /// Returns the [ToolDefinition] registered under [name], or `null` if not found.
   ToolDefinition? operator [](String name) => _tools[name];
 
+  /// Whether a tool is registered under [name].
+  ///
+  /// Prefer over [contains], which follows [Iterable] semantics.
+  bool hasTool(String name) => _tools.containsKey(name);
+
   /// Encodes registered tool schemas into provider-specific JSON.
   ///
   /// - `encode()` — all tools, OpenAI format (default).
@@ -122,22 +115,13 @@ class ToolRegistry extends IterableBase<JsonObject> {
   /// - `encode(name: 'search')` — that tool only, OpenAI format (1-element list).
   /// - `encode(name: 'search', format: SchemaFormat.anthropic)` — that tool, Anthropic.
   ///
-  /// The return type is always `List<JsonObject>`, making spreads and direct
-  /// assignment to LLM APIs consistent regardless of scope.
-  ///
-  /// ```dart
-  /// // All tools to OpenAI
-  /// llm.generate(tools: toolRegistry.encode());
-  ///
-  /// // All tools to Gemini
-  /// llm.generate(tools: toolRegistry.encode(format: SchemaFormat.gemini));
-  ///
-  /// // Spread with extra tools
-  /// final tools = [...toolRegistry.encode(), thinkTool];
-  ///
-  /// // Single tool by name
-  /// toolRegistry.encode(name: 'search');
-  /// ```
+  /// Unlike [schemas].format, this method filters by each tool's declared
+  /// `formats` list (tools restricted via `@Tool(formats:)` are excluded
+  /// from formats they do not declare).
+  @Deprecated(
+    'Use tools[name].format(...) for a single tool or '
+    'tools.schemas.format(...) for all tools.',
+  )
   List<JsonObject> encode({
     String? name,
     SchemaFormat format = SchemaFormat.openAi,
@@ -162,6 +146,7 @@ class ToolRegistry extends IterableBase<JsonObject> {
   /// Convenience getter — all tools encoded in OpenAI format.
   ///
   /// Equivalent to `encode()`.
+  @Deprecated('Use tools.schemas.format(.openAi).')
   List<JsonObject> get encoded => encode();
 
   // ── Dispatch ──────────────────────────────────────────────────────────────

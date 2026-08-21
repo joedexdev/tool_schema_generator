@@ -18,25 +18,13 @@ class ToolSchema {
   JsonObject get parameters => _tool.parametersSchema;
 
   /// Formats the schema for the requested [format].
+  ///
+  /// The single canonical encoding path:
+  ///
+  /// ```dart
+  /// final gemini = tools.sendEmail.schema.format(.gemini);
+  /// ```
   JsonObject format(SchemaFormat format) => _tool.encode(format);
-
-  /// Formats the schema for Google Gemini FunctionDeclaration.
-  JsonObject toGemini() => _tool.encode(SchemaFormat.gemini);
-
-  /// Formats the schema for Anthropic Claude.
-  JsonObject toAnthropic() => _tool.encode(SchemaFormat.anthropic);
-
-  /// Formats the schema for OpenAI.
-  JsonObject toOpenAi() => _tool.encode(SchemaFormat.openAi);
-
-  /// Formats the schema for Model Context Protocol (MCP).
-  JsonObject toMcp() => _tool.encode(SchemaFormat.mcp);
-
-  /// Raw OpenAI JSON representation.
-  JsonObject toJson() => toOpenAi();
-
-  /// Alias for [toJson].
-  JsonObject toMap() => toOpenAi();
 
   @override
   String toString() => 'ToolSchema(name: $name)';

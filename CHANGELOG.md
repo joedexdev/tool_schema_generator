@@ -3,19 +3,30 @@
 ### Added
 
 * **Idiomatic `tools` Collection:** Generated files now emit `final tools = _ToolRegistry([...])` with a non-breaking `final toolRegistry = tools;` alias.
-* **Provider-Specific Schema Getters:** Added `tools.toGeminiSchemas()`, `tools.toAnthropicSchemas()`, `tools.toOpenAiSchemas()`, and `tools.toMcpSchemas()`.
-* **Dedicated `ToolSchema` & `ToolSchemaCollection`:** Strongly typed schema wrapper supporting `tool.schema.format()`, `tool.schema.toGemini()`, `tool.schema.toAnthropic()`, `tool.schema.toMcp()`, and `tool.schema.parameters`.
-* **Dart Operators:** Added subscript `tools['name']`, union `toolsA + toolsB`, and callable execution `await tools(name, args)`.
-* **Collection Accessors:** Added `tools.definitions` and `tools.schemas` for clean functional Dart pipeline access.
+* **`SchemaFormat.mcp`:** Model Context Protocol is a first-class provider — MCP shapes flow through the same encoder as every other format.
+* **One encoding verb:** `format(SchemaFormat)` on `ToolDefinition`, `ToolSchema`, and `ToolSchemaCollection`, reading naturally with Dart's enum dot-shorthand: `tools.schemas.format(.gemini)`.
+* **Dedicated `ToolSchema` & `ToolSchemaCollection`:** strongly typed schema wrapper (`tool.schema.format(...)`, `tool.schema.parameters`) and batch collection with per-format memoized results.
+* **`ToolDefinition.format(SchemaFormat)`:** canonical single-tool encoder; `encode([format])` remains as a deprecated shim.
+* **`ToolRegistry.hasTool(String)`:** explicit name lookup without `Iterable.contains` string-overload ambiguity.
+* **Memoization:** `tools.schemas` and its per-format results are computed once (registries are immutable after construction).
+* **Dart Operators:** subscript `tools['name']`, union `toolsA + toolsB`, and callable execution `await tools(name, args)`.
+* **Collection Accessors:** added `tools.definitions` and `tools.schemas`.
 
 ### Changed
 
 * Minimum Dart SDK raised from 3.10 to **3.11**.
-* Enabled `package:lints/recommended.yaml` and resolved all resulting analyzer findings.
+* Enabled `package:lints/recommended.yaml`; resolved all resulting analyzer findings.
+* ⚠️ Adding `SchemaFormat.mcp` breaks exhaustive `switch` statements over `SchemaFormat`; add a `case SchemaFormat.mcp:` (or default) when upgrading.
 
 ### Deprecated
 
-* `toolRegistry.allSchemas` is deprecated in favor of `tools.schemas` or `tools.toOpenAiSchemas()`.
+* `toolRegistry.encode(...)` / `toolRegistry.encoded` — use `tools.schemas.format(...)` (batch) or `tools['name']!.format(...)` (single). Removal in 2.0.
+* `toolDefinition.encode([format])` — use `toolDefinition.format(format)`. Removal in 2.0.
+* `toolRegistry.allSchemas` — use `tools.schemas.format(.openAi)`.
+
+### Removed (unreleased previews)
+
+* Provider-named getters that existed only in unreleased 1.2.0 previews were consolidated into `format(...)` before release: `toGeminiSchemas()`, `toAnthropicSchemas()`, `toOpenAiSchemas()`, `toMcpSchemas()`, `ToolSchema.toGemini()/toAnthropic()/toOpenAi()/toMcp()/toJson()/toMap()`, `ToolSchemaCollection.toGemini()/toAnthropic()/toOpenAi()/toMcp()/raw`, and `ToolDefinition.toXSchema()` variants. Nothing to migrate if you never ran a preview build.
 
 ---
 

@@ -274,24 +274,25 @@ void main() {
         expect(registry.definitions.length, 1);
         expect(registry.schemas.length, 1);
 
-        final geminiList = registry.toGeminiSchemas();
+        final geminiList = registry.schemas.format(SchemaFormat.gemini);
         expect(geminiList.first['name'], 'getWeather');
         expect(geminiList.first.containsKey('parameters'), isTrue);
         expect(geminiList.first.containsKey('type'), isFalse);
 
-        final anthropicList = registry.toAnthropicSchemas();
+        final anthropicList = registry.schemas.format(SchemaFormat.anthropic);
         expect(anthropicList.first['input_schema'], isNotNull);
 
-        final mcpList = registry.toMcpSchemas();
+        final mcpList = registry.schemas.format(SchemaFormat.mcp);
         expect(mcpList.first['inputSchema'], isNotNull);
 
-        final openAiList = registry.toOpenAiSchemas();
+        final openAiList = registry.schemas.format(SchemaFormat.openAi);
         expect(openAiList.first['type'], 'function');
 
         final tool = registry['getWeather']!;
-        expect(tool.schema.toGemini()['name'], 'getWeather');
-        expect(tool.schema.toAnthropic()['name'], 'getWeather');
-        expect(tool.schema.toMcp()['name'], 'getWeather');
+        expect(tool.format(SchemaFormat.gemini)['name'], 'getWeather');
+        expect(tool.format(SchemaFormat.anthropic)['name'], 'getWeather');
+        expect(tool.format(SchemaFormat.mcp)['name'], 'getWeather');
+        expect(tool.schema.format(.gemini)['name'], 'getWeather');
         expect(tool.schema.parameters['type'], 'object');
       },
     );
