@@ -1,6 +1,6 @@
 import 'annotations.dart';
+import 'json_types.dart';
 import 'tool_definition.dart';
-import 'tool_registry.dart';
 
 /// Encapsulates a tool's schema and provider formatting methods.
 class ToolSchema {
@@ -31,10 +31,10 @@ class ToolSchema {
 
   /// Formats the schema for Model Context Protocol (MCP).
   JsonObject toMcp() => <String, Object?>{
-        'name': name,
-        if (description.isNotEmpty) 'description': description,
-        'inputSchema': parameters,
-      };
+    'name': name,
+    if (description.isNotEmpty) 'description': description,
+    'inputSchema': parameters,
+  };
 
   /// Raw OpenAI JSON representation.
   JsonObject toJson() => toOpenAi();

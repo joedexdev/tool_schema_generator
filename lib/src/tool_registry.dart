@@ -1,20 +1,11 @@
 import 'dart:collection';
 import 'annotations.dart';
+import 'json_types.dart';
 import 'tool_definition.dart';
 import 'tool_exceptions.dart';
 import 'tool_schema_collection.dart';
 
-/// A JSON object passed to or produced by tool schema APIs.
-typedef JsonObject = Map<String, Object?>;
-
-/// A JSON array passed to or produced by tool schema APIs.
-typedef JsonArray = List<Object?>;
-
-/// The signature of every generated tool handler.
-///
-/// Each handler receives the raw arguments map from the LLM and returns a
-/// [Future] that resolves to the tool function's return value.
-typedef ToolHandler = Future<Object?> Function(JsonObject args);
+export 'json_types.dart';
 
 /// A collection and dispatch registry of [ToolDefinition]s, providing
 /// a unified multi-format discovery and execution layer between LLMs and Dart code.
@@ -93,7 +84,10 @@ class ToolRegistry extends IterableBase<JsonObject> {
   Iterable<ToolDefinition> get definitions => _tools.values;
 
   /// A collection of all registered tool schemas with batch formatters.
-  ToolSchemaCollection get schemas => ToolSchemaCollection(_tools.values);
+  ///
+  /// Memoized: registries are immutable after construction, so the collection
+  /// (and its per-format encodings) never go stale.
+  late final ToolSchemaCollection schemas = ToolSchemaCollection(_tools.values);
 
   /// Formats all registered tools for Google Gemini FunctionDeclaration.
   List<JsonObject> toGeminiSchemas() => schemas.toGemini();

@@ -1,7 +1,16 @@
 import 'dart:collection';
 import 'annotations.dart';
-import 'tool_registry.dart';
+import 'json_types.dart';
+// One intentional back-reference: the [schema] convenience getter wraps this
+// definition in a ToolSchema. Removing it would break public API; every other
+// former registry/schema dependency now flows through json_types.dart.
 import 'tool_schema.dart';
+
+/// The signature of every generated tool handler.
+///
+/// Each handler receives the raw arguments map from the LLM and returns a
+/// [Future] that resolves to the tool function's return value.
+typedef ToolHandler = Future<Object?> Function(JsonObject args);
 
 /// A single tool: its identity, parameter schema, and execution handler.
 ///
@@ -129,5 +138,9 @@ class ToolDefinition extends MapView<String, Object?> {
   JsonObject toOpenAiSchema() => encode(SchemaFormat.openAi);
 
   /// Formats this tool's schema for Model Context Protocol (MCP).
-  JsonObject toMcpSchema() => schema.toMcp();
+  JsonObject toMcpSchema() => <String, Object?>{
+    'name': name,
+    if (description.isNotEmpty) 'description': description,
+    'inputSchema': parametersSchema,
+  };
 }

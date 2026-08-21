@@ -130,8 +130,16 @@ void main() {
 
       // Intentionally exercises the String-name overload of `contains`
       // (documented 1.x behavior; superseded by `hasTool` in a future major).
-      expect(expanded.contains('a'), isTrue); // ignore: collection_methods_unrelated_type
-      expect(expanded.contains('b'), isTrue); // ignore: collection_methods_unrelated_type
+      expect(
+        // ignore: collection_methods_unrelated_type
+        expanded.contains('a'),
+        isTrue,
+      );
+      expect(
+        // ignore: collection_methods_unrelated_type
+        expanded.contains('b'),
+        isTrue,
+      );
       expect(await expanded.call('a', const {}), 'a');
       expect(await expanded.call('b', const {}), 'b');
     });
@@ -233,7 +241,9 @@ void main() {
       final registry = ToolRegistry([rawSchema]);
 
       expect(
-        registry.contains('raw_map_tool'), // ignore: collection_methods_unrelated_type
+        // Intentional: exercises the String-name overload of `contains`.
+        // ignore: collection_methods_unrelated_type
+        registry.contains('raw_map_tool'),
         isTrue,
       );
       expect(registry['raw_map_tool']!.name, 'raw_map_tool');
@@ -244,44 +254,47 @@ void main() {
       );
     });
 
-    test('ToolRegistry definitions, schemas, and multi-format getters work', () {
-      final registry = ToolRegistry([
-        ToolDefinition(
-          name: 'getWeather',
-          description: 'Get weather',
-          parametersSchema: const {
-            'type': 'object',
-            'properties': {
-              'city': {'type': 'string'},
+    test(
+      'ToolRegistry definitions, schemas, and multi-format getters work',
+      () {
+        final registry = ToolRegistry([
+          ToolDefinition(
+            name: 'getWeather',
+            description: 'Get weather',
+            parametersSchema: const {
+              'type': 'object',
+              'properties': {
+                'city': {'type': 'string'},
+              },
             },
-          },
-          handler: (args) async => 'sunny',
-        ),
-      ]);
+            handler: (args) async => 'sunny',
+          ),
+        ]);
 
-      expect(registry.definitions.length, 1);
-      expect(registry.schemas.length, 1);
+        expect(registry.definitions.length, 1);
+        expect(registry.schemas.length, 1);
 
-      final geminiList = registry.toGeminiSchemas();
-      expect(geminiList.first['name'], 'getWeather');
-      expect(geminiList.first.containsKey('parameters'), isTrue);
-      expect(geminiList.first.containsKey('type'), isFalse);
+        final geminiList = registry.toGeminiSchemas();
+        expect(geminiList.first['name'], 'getWeather');
+        expect(geminiList.first.containsKey('parameters'), isTrue);
+        expect(geminiList.first.containsKey('type'), isFalse);
 
-      final anthropicList = registry.toAnthropicSchemas();
-      expect(anthropicList.first['input_schema'], isNotNull);
+        final anthropicList = registry.toAnthropicSchemas();
+        expect(anthropicList.first['input_schema'], isNotNull);
 
-      final mcpList = registry.toMcpSchemas();
-      expect(mcpList.first['inputSchema'], isNotNull);
+        final mcpList = registry.toMcpSchemas();
+        expect(mcpList.first['inputSchema'], isNotNull);
 
-      final openAiList = registry.toOpenAiSchemas();
-      expect(openAiList.first['type'], 'function');
+        final openAiList = registry.toOpenAiSchemas();
+        expect(openAiList.first['type'], 'function');
 
-      final tool = registry['getWeather']!;
-      expect(tool.schema.toGemini()['name'], 'getWeather');
-      expect(tool.schema.toAnthropic()['name'], 'getWeather');
-      expect(tool.schema.toMcp()['name'], 'getWeather');
-      expect(tool.schema.parameters['type'], 'object');
-    });
+        final tool = registry['getWeather']!;
+        expect(tool.schema.toGemini()['name'], 'getWeather');
+        expect(tool.schema.toAnthropic()['name'], 'getWeather');
+        expect(tool.schema.toMcp()['name'], 'getWeather');
+        expect(tool.schema.parameters['type'], 'object');
+      },
+    );
 
     test('operator + combines two registries', () {
       final reg1 = ToolRegistry([
@@ -303,8 +316,16 @@ void main() {
 
       final combined = reg1 + reg2;
       expect(combined.definitions.length, 2);
-      expect(combined.contains('a'), isTrue); // ignore: collection_methods_unrelated_type
-      expect(combined.contains('b'), isTrue); // ignore: collection_methods_unrelated_type
+      expect(
+        // ignore: collection_methods_unrelated_type
+        combined.contains('a'),
+        isTrue,
+      );
+      expect(
+        // ignore: collection_methods_unrelated_type
+        combined.contains('b'),
+        isTrue,
+      );
     });
   });
 }

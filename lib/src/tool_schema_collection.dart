@@ -1,15 +1,16 @@
 import 'dart:collection';
 import 'annotations.dart';
+import 'json_types.dart';
 import 'tool_definition.dart';
-import 'tool_registry.dart';
 import 'tool_schema.dart';
 
 /// A collection of tool schemas with batch conversion methods for various LLMs.
 class ToolSchemaCollection with IterableMixin<ToolSchema> {
   final List<ToolDefinition> _tools;
+  final Map<SchemaFormat, List<JsonObject>> _formatCache = {};
 
   ToolSchemaCollection(Iterable<ToolDefinition> tools)
-      : _tools = List.unmodifiable(tools);
+    : _tools = List.unmodifiable(tools);
 
   @override
   Iterator<ToolSchema> get iterator =>
@@ -19,8 +20,12 @@ class ToolSchemaCollection with IterableMixin<ToolSchema> {
   int get length => _tools.length;
 
   /// Formats all schemas for the given [format].
-  List<JsonObject> format(SchemaFormat format) =>
-      List.unmodifiable(_tools.map((t) => t.encode(format)));
+  ///
+  /// Memoized per format: definitions are immutable after construction.
+  List<JsonObject> format(SchemaFormat format) => _formatCache.putIfAbsent(
+    format,
+    () => List.unmodifiable(_tools.map((t) => t.encode(format))),
+  );
 
   /// Formats all schemas for Google Gemini.
   List<JsonObject> toGemini() => format(SchemaFormat.gemini);

@@ -1,6 +1,6 @@
 import 'package:analyzer/dart/element/element.dart';
-import 'package:tool_schema_generator/tool_schema_generator.dart';
 
+import 'annotations.dart';
 import 'schema_spec.dart';
 
 final class ToolSpec {

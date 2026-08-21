@@ -147,7 +147,7 @@ Verbatim move of definitions at lib/src/tool_registry.dart:8-11 (docs preserved)
 | `lib/src/tool_registry.dart` | Delete local typedefs (:8-11) → `import 'json_types.dart';` **plus `export 'json_types.dart';`** (back-compat via public barrel). Cache `schemas` (§5.6). |
 | `lib/src/tool_schema_collection.dart` | Drop `tool_registry.dart` (:4) → `import 'json_types.dart';`. **Cycle A broken.** |
 | `lib/src/tool_schema.dart` | Drop `tool_registry.dart` (:3) → `import 'json_types.dart';`. |
-| `lib/src/tool_definition.dart` | Drop `tool_registry.dart` (:3) → `import 'json_types.dart';`; drop `tool_schema.dart` (:4) once MCP flows through `encode()` (§5.7). **Cycle B broken.** |
+| `lib/src/tool_definition.dart` | Drop `tool_registry.dart` (:3) → `import 'json_types.dart';`; drop `tool_schema.dart` (:4), then re-add solely for the `.schema` getter — the definition↔schema wrapper pair references each other inherently (REV 2 CORRECTION: cycle B cannot close without removing public API; only its *accidental* edges are removed). |
 | `lib/src/tool_parser.dart:5` | Barrel import → `import 'annotations.dart';` (grep first: only `SchemaFormat` consumed). |
 | `lib/src/tool_spec.dart:2` | Same replacement (`SchemaFormat` in `formats` field). |
 

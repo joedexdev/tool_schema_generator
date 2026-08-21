@@ -2,8 +2,8 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:source_gen/source_gen.dart';
-import 'package:tool_schema_generator/tool_schema_generator.dart';
 
+import 'annotations.dart';
 import 'schema_spec.dart';
 import 'tool_spec.dart';
 import 'type_mapper.dart';
