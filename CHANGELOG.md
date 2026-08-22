@@ -1,4 +1,7 @@
-## 1.2.0
+## 1.2.0-dev
+
+Prerelease of the 1.2.0 line: idiomatic `tools` collection, `SchemaFormat.mcp`,
+and the single canonical `format(SchemaFormat)` encoding path.
 
 ### Added
 

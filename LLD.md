@@ -1,6 +1,6 @@
 # LLD.md — Low-Level Design: v1.2.0 Cleanup Refactor
 
-**Package:** `tool_schema_generator` · **Target release:** `1.2.0` · **Status:** Approved plan
+**Package:** `tool_schema_generator` · **Target release:** `1.2.0-dev` (prerelease; stable `1.2.0` follows) · **Status:** Implemented
 **Rev 2** — supersedes Rev 1. Owner decision 2026-08-21: consolidate the entire encoding surface
 onto `format(...)` (leveraging Dart ≥3.10 dot-shorthand: `format(.gemini)`) and unify MCP into
 `SchemaFormat`.

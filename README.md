@@ -588,6 +588,9 @@ future schema work much safer:
 
 ## Migrating to 1.2.0
 
+> These changes ship in **1.2.0**; try them today with
+> `tool_schema_generator: ^1.2.0-dev`.
+
 1.2.0 introduces the idiomatic `tools` collection, `SchemaFormat.mcp`, and a single
 canonical encoding path: `format(SchemaFormat)` — reading naturally with Dart's enum
 dot-shorthand (`format(.gemini)`) on SDK ≥3.10.
