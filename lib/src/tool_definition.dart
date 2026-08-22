@@ -52,6 +52,16 @@ class ToolDefinition extends MapView<String, Object?> {
          },
        });
 
+  /// Creates a tool definition from a raw, hand-written schema map.
+  ///
+  /// Accepts both envelope shapes:
+  /// - OpenAI-style `{"type": "function", "function": {...}}`
+  /// - Flat maps with `name`/`description` and `parameters` or `input_schema`
+  ///
+  /// The normalized definition is a first-class citizen: [format] derives any
+  /// [SchemaFormat] envelope from the extracted fields, exactly as it does for
+  /// generated tools. Manual tools declare every format by default and,
+  /// unless a [handler] is provided, dispatching them throws.
   ToolDefinition.raw({
     required JsonObject schema,
     required this.handler,

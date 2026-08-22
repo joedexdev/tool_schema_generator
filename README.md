@@ -451,6 +451,29 @@ final extended = toolRegistry.extend([rawToolSchema]);
 `ToolDefinition.raw()` normalises both envelope shapes:
 - `{"type": "function", "function": {...}}` (OpenAI-style) — used as-is.
 - `{"name": ..., "parameters": ...}` (flat, Gemini/Anthropic-style) — wrapped automatically.
+- Flat Anthropic maps using `"input_schema"` are recognized too.
+
+After normalization a manual definition is indistinguishable from a generated one —
+the same canonical `format(...)` verb applies:
+
+```dart
+final registry = ToolRegistry([
+  {'type': 'function', 'function': {'name': 'thinkTool', 'parameters': {...}}},
+]);
+
+registry['thinkTool']!.format(.gemini); // derive any provider on demand
+registry.schemas.format(.mcp);          // mixes generated + manual tools in one batch
+```
+
+Notes:
+- Manual tools declare `formats: SchemaFormat.values`, so they appear in every
+  provider batch (including MCP).
+- Derived envelopes (`anthropic`/`gemini`/`mcp`) rebuild strictly from the
+  normalized `name`/`description`/`parametersSchema`; provider-exotic keys from
+  your raw map are preserved only in the `openAi` view.
+- Without a handler, `registry.call(name, args)` throws
+  `ToolExecutionException` — useful when you only forward schemas and never
+  execute locally.
 
 ---
 
